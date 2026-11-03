@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>GymE&amp;F</title>
+  <meta name="description" content="Rutinas, entrenamientos y progreso de GymE&F." />
+  <!-- Un solo color para las barras del navegador, según el modo del perfil (no el del teléfono). -->
+  <meta name="theme-color" content="#000000" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="GymE&amp;F" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Modo claro/oscuro antes de pintar, para no ver un parpadeo (src/theme.js lo completa después).
+    try {
+      var a = JSON.parse(localStorage.getItem('gymef.appearance')) || {};
+      var dark = a.mode === 'dark' || (a.mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.mode = dark ? 'dark' : 'light';
+      document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      document.querySelector('meta[name="theme-color"]').content = dark ? '#000000' : '#f2f2f7';
+      if (a.text) document.documentElement.dataset.text = a.text;
+    } catch (e) {}
+    // El letrero obligatorio del plan gratis de Netlify va en su propia franja, sin tapar botones.
+    if (/\.netlify\.app$/.test(location.hostname)) document.documentElement.classList.add('host-badge');
+  </script>
+  <script src="config.js"></script>
+  <script src="vendor/supabase.js"></script>
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>GymE&amp;F necesita JavaScript.</noscript>
+</body>
+</html>

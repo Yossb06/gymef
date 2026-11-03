@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pruebas GymE&amp;F</title>
+  <style>body { font: 15px/1.5 -apple-system, sans-serif; margin: 24px; } .ok { color: #248a3d; } .fail { color: #d70015; }</style>
+</head>
+<body>
+  <h1>Pruebas de reglas</h1>
+  <pre id="out">Ejecutando…</pre>
+  <script type="module">
+    import { run } from './domain.test.js';
+    const { tests, failures } = run();
+    const out = document.getElementById('out');
+    out.className = failures.length ? 'fail' : 'ok';
+    out.textContent = failures.length ? `${failures.length} de ${tests} fallaron:\n${failures.join('\n')}` : `${tests} pruebas correctas`;
+  </script>
+</body>
+</html>
