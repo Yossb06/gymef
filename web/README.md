@@ -45,7 +45,7 @@ Ambas usan el mismo proyecto de Supabase, así que los datos son los mismos en l
 ## Publicar cambios
 
 1. `python3 -I Scripts/release-web.py`: fija la versión (fecha + hash) y la lista de archivos que se guardan para usar sin conexión en `sw.js`.
-2. **GitHub:** en el repositorio, entrar a la carpeta `web` → **Add file → Upload files** → arrastrar el **contenido** de la carpeta `web/` local → **Commit changes**. En 1–2 minutos queda publicada.
+2. **GitHub:** `python3 -I Scripts/prepare-upload.py` compara con lo publicado y copia solo lo nuevo o cambiado a `Exports/Subida-GitHub/<versión>/parte-N-de-M/web/` (máximo 100 archivos por parte, el límite de GitHub). Para cada parte, en orden: abrir https://github.com/Yossb06/gymef/upload/main (la raíz del repositorio), arrastrar **la carpeta `web`** de esa parte, entera → **Commit changes**. GitHub conserva el nombre de la carpeta arrastrada, por eso se sube a la raíz. Volver a ejecutar el script confirma que todo quedó en su sitio y avisa de carpetas sobrantes. En 1–2 minutos queda publicada.
 3. *(Mientras se conserve)* **Netlify:** arrastrar la carpeta `web/` a **Deploys** (recuadro punteado al final de la lista).
 4. Los teléfonos descargan la versión nueva en segundo plano y muestran «Hay una versión nueva · Actualizar». La versión instalada se ve en **Más**.
 

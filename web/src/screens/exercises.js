@@ -1,8 +1,9 @@
 import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
+import { N, spanishName } from '../catalog.js';
 import { Page, Section, Row, Sheet, Field, Input, Segmented, Icon, Tile, run, toast, go } from '../ui.js';
-import { guideFor, videoURL } from '../guides.js';
+import { guideFor, videoURL, bodyInfo, SAFETY_GENERAL } from '../guides.js';
 import { builtInFrames, customMedia, mediaURL, addExerciseMedia, removeExerciseMedia } from '../media.js';
 import { activeProfileID } from '../session.js';
 import { confirmDialog } from '../ui.js';
@@ -28,10 +29,13 @@ function SearchList({ onPick, hrefFor, selected }) {
   const all = data.exercises();
   const muscleOf = (e) => (e.primaryMuscle ?? '').trim() || 'Sin especificar';
   const muscles = [...new Set(all.map(muscleOf))].sort((a, b) => a.localeCompare(b, 'es'));
-  const list = all.filter((e) => (!query.trim() || D.matchesSearch(e, query)) && (!muscle || muscleOf(e) === muscle));
+  // Busca por el nombre guardado y por su nombre en español; ordena por el nombre que se muestra.
+  const searchable = (e) => ({ ...e, aliasesText: `${e.aliasesText ?? ''} ${spanishName(e.name) ?? ''}` });
+  const list = all.filter((e) => (!query.trim() || D.matchesSearch(searchable(e), query)) && (!muscle || muscleOf(e) === muscle))
+    .sort((a, b) => N(a.name).localeCompare(N(b.name), 'es'));
   const groups = query.trim() ? [['Resultados', list]] : muscles.filter((m) => !muscle || m === muscle)
     .map((m) => [m, list.filter((e) => muscleOf(e) === m)]).filter(([, items]) => items.length);
-  const row = (e) => html`<${Row} icon=${html`<${MuscleTile} muscle=${e.primaryMuscle} />`} title=${e.name} sub=${`${e.equipment} · ${D.LOAD_TYPES[e.loadType]}`}
+  const row = (e) => html`<${Row} icon=${html`<${MuscleTile} muscle=${e.primaryMuscle} />`} title=${N(e.name)} sub=${`${e.equipment} · ${D.LOAD_TYPES[e.loadType]}`}
     onClick=${onPick && (() => onPick(e))} href=${hrefFor?.(e)} chevron=${!selected}
     right=${selected && html`<span class=${`pick ${selected.has(e.id) ? 'on' : ''}`}>${selected.has(e.id) && html`<${Icon} name="check" size=${16} />`}</span>`} />`;
   return html`
@@ -56,11 +60,11 @@ export function ExercisePicker({ title = 'Elegir ejercicio', onPick, onPickMany,
   const toggle = (e) => { const next = new Set(selected); next.has(e.id) ? next.delete(e.id) : next.add(e.id); setSelected(next); };
   const choose = (e) => (multiple ? toggle(e) : prescription ? setSingle(e) : onPick(e));
   if (single) {
-    return html`<${Sheet} title=${single.name} onClose=${() => setSingle(null)}
+    return html`<${Sheet} title=${N(single.name)} onClose=${() => setSingle(null)}
       right=${html`<button class="btn plain" onClick=${() => onPick(single, rx)}>Añadir</button>`}>
       <div class="card"><${PrescriptionPicker} value=${rx} onChange=${setRx} /></div>
       ${footer?.(rx)}
-      <button class="btn primary block big" style="margin-top:16px" onClick=${() => onPick(single, rx)}><${Icon} name="plus" /> Añadir ${single.name}</button>
+      <button class="btn primary block big" style="margin-top:16px" onClick=${() => onPick(single, rx)}><${Icon} name="plus" /> Añadir ${N(single.name)}</button>
     <//>`;
   }
   return html`
@@ -145,7 +149,7 @@ export function PreferenceSheet({ owner, exerciseID, onClose }) {
   });
   return html`
     <${Sheet} title="Tu configuración" onClose=${onClose} right=${html`<button class="btn plain" onClick=${save}>Guardar</button>`}>
-      <p class="muted small" style="margin-top:0">${ex.name} · solo para tu perfil.</p>
+      <p class="muted small" style="margin-top:0">${N(ex.name)} · solo para tu perfil.</p>
       <div class="card stack">
         <${Field} group label="Unidad para este ejercicio"><${Segmented} options=${{ '': `Perfil (${profileUnit})`, kg: 'kg', lb: 'lb' }} value=${unit} onChange=${setUnit} /><//>
         <${Field} label="Incremento sugerido">
@@ -174,10 +178,10 @@ export function ExerciseDetail({ owner, id }) {
   const suggestion = data.progressionForKey(owner, D.libraryKey(ex));
   const unit = data.unitFor(owner, id);
   return html`
-    <${Page} title=${ex.name} backTo="ejercicios" right=${html`<button class="btn plain" onClick=${() => setSheet('edit')}>Editar</button>`}>
+    <${Page} title=${N(ex.name)} backTo="ejercicios" right=${html`<button class="btn plain" onClick=${() => setSheet('edit')}>Editar</button>`}>
       <${ExerciseVisual} exercise=${ex} editable />
       <div class="card" style="margin-top:12px">
-        <div style="font-size:22px;font-weight:700">${ex.name}</div>
+        <div style="font-size:22px;font-weight:700">${N(ex.name)}</div>
         <div class="muted small">${ex.primaryMuscle} · ${ex.equipment} · ${D.LOAD_TYPES[ex.loadType]}${ex.isUnilateral ? ' · Reps por lado' : ''}</div>
         ${ex.instructionsText && html`<p style="white-space:pre-wrap;margin-bottom:0">${ex.instructionsText}</p>`}
       </div>
@@ -203,27 +207,94 @@ export function ExerciseDetail({ owner, id }) {
     ${sheet === 'pref' && html`<${PreferenceSheet} owner=${owner} exerciseID=${id} onClose=${() => setSheet(null)} />`}`;
 }
 
-/** Ficha «¿Cómo se hace?»: pasos y claves (sin conexión) y un botón a videos de técnica (con conexión). */
-export function GuideSheet({ exercise, onClose }) {
+const GUIDE_TABS = { how: 'Técnica', muscles: 'Músculos', safety: 'Cuidados', variations: 'Variantes' };
+
+/**
+ * Ficha «¿Cómo se hace?» con pestañas: técnica (pasos y video), músculos, cuidados para evitar lesiones y
+ * variaciones con otro equipo. `onUse(ejercicio)` muestra el botón `useLabel` en cada variación
+ * (p. ej. «Hacer este hoy» en el entrenamiento o «Cambiar en mi rutina»).
+ */
+export function GuideSheet({ exercise: given, onClose, onUse, useLabel, tab: initialTab = 'how', nested = false }) {
+  const [tab, setTab] = useState(initialTab);
+  // Siempre la versión guardada más reciente (variaciones, imagen o datos pudieron cambiar con la hoja abierta).
+  // Una variación del catálogo llega sin id; si ya se agregó a la biblioteca (p. ej. al ponerle foto), se usa esa.
+  const exercise = (given.id ? data.exercise(given.id) : data.findExercise(given.name)) ?? given;
   const guide = guideFor(exercise);
+  const info = bodyInfo(exercise);
   const notes = exercise.instructionsText?.trim();
+  const tabs = nested ? { how: GUIDE_TABS.how, muscles: GUIDE_TABS.muscles, safety: GUIDE_TABS.safety } : GUIDE_TABS;
   return html`
-    <${Sheet} title="¿Cómo se hace?" onClose=${onClose}>
+    <${Sheet} title=${N(exercise.name)} onClose=${onClose}>
       <${ExerciseVisual} exercise=${exercise} editable />
-      <div class="card stack" style="margin-top:12px">
-        <div class="hstack"><${MuscleTile} muscle=${exercise.primaryMuscle} />
-          <div class="spacer"><b>${exercise.name}</b><div class="small muted">${exercise.primaryMuscle} · ${exercise.equipment} · ${D.LOAD_TYPES[exercise.loadType]}</div></div></div>
-        ${guide ? html`
-          <ol class="guide-steps">${guide.steps.map((step) => html`<li>${step}</li>`)}</ol>
-          <div class="guide-tips">${guide.tips.map((tip) => html`<div>💡 ${tip}</div>`)}</div>`
-        : !notes && html`<p class="muted small" style="margin:0">Este ejercicio no tiene guía todavía. Puedes escribir tus propias indicaciones en la ficha del ejercicio → Editar → Instrucciones.</p>`}
-        ${notes && html`<div><div class="caps" style="margin-bottom:4px">Tus indicaciones</div><div style="white-space:pre-wrap">${notes}</div></div>`}
-      </div>
-      <a class="btn primary block big" style="margin-top:12px" href=${videoURL(exercise)} target="_blank" rel="noopener"
-        onClick=${(e) => { if (!navigator.onLine) { e.preventDefault(); toast('Necesitas internet para ver videos. La guía de arriba funciona sin conexión.'); } }}>
-        <${Icon} name="play" /> Ver video de técnica</a>
-      <p class="muted small center">Se abre YouTube con videos de este ejercicio.</p>
+      <div style="margin-top:12px"><${Segmented} options=${tabs} value=${tab} onChange=${setTab} /></div>
+      ${tab === 'how' && html`
+        <div class="card stack" style="margin-top:12px">
+          <div class="hstack"><${MuscleTile} muscle=${exercise.primaryMuscle} />
+            <div class="spacer"><b>${N(exercise.name)}</b><div class="small muted">${[exercise.equipment, D.LOAD_TYPES[exercise.loadType]].filter(Boolean).join(' · ')}</div></div></div>
+          ${guide ? html`
+            <ol class="guide-steps">${guide.steps.map((step) => html`<li>${step}</li>`)}</ol>
+            <div class="guide-tips">${guide.tips.map((tip) => html`<div>💡 ${tip}</div>`)}</div>`
+          : !notes && html`<p class="muted small" style="margin:0">Este ejercicio no tiene guía todavía. Puedes escribir tus propias indicaciones en la ficha del ejercicio → Editar → Instrucciones.</p>`}
+          ${notes && html`<div><div class="caps" style="margin-bottom:4px">Tus indicaciones</div><div style="white-space:pre-wrap">${notes}</div></div>`}
+        </div>
+        <a class="btn primary block big" style="margin-top:12px" href=${videoURL(exercise)} target="_blank" rel="noopener"
+          onClick=${(e) => { if (!navigator.onLine) { e.preventDefault(); toast('Necesitas internet para ver videos. La guía funciona sin conexión.'); } }}>
+          <${Icon} name="play" /> Ver video de técnica</a>
+        <p class="muted small center">Se abre YouTube con videos de este ejercicio.</p>`}
+      ${tab === 'muscles' && html`
+        <div class="card stack" style="margin-top:12px">
+          ${info.about && html`<p style="margin:0">${info.about}</p>`}
+          ${info.primary.length > 0 && html`<div><div class="caps" style="margin-bottom:6px">Trabaja principalmente</div>
+            <div class="chips wrap" style="margin:0">${info.primary.map((m) => html`<span class="chip on" style=${`--tint:${D.muscleColor(m.split(' ')[0])}`}>${m}</span>`)}</div></div>`}
+          ${info.secondary.length > 0 && html`<div><div class="caps" style="margin-bottom:6px">También ayudan</div>
+            <div class="chips wrap" style="margin:0">${info.secondary.map((m) => html`<span class="chip muscle-secondary">${m}</span>`)}</div></div>`}
+          ${!info.primary.length && html`<p class="muted small" style="margin:0">Indica el músculo principal en la ficha del ejercicio → Editar.</p>`}
+        </div>`}
+      ${tab === 'safety' && html`
+        <div class="card stack" style="margin-top:12px">
+          ${info.safety.length > 0 && html`<div><div class="caps" style="margin-bottom:6px">En este ejercicio</div>
+            <ul class="safety-list">${info.safety.map((t) => html`<li>${t}</li>`)}</ul></div>`}
+          <div><div class="caps" style="margin-bottom:6px">Siempre</div>
+            <ul class="safety-list general">${SAFETY_GENERAL.map((t) => html`<li>${t}</li>`)}</ul></div>
+        </div>`}
+      ${tab === 'variations' && html`<${Variations} exercise=${exercise} onUse=${onUse} useLabel=${useLabel} />`}
     <//>`;
+}
+
+const equipmentLabel = (ex) => {
+  if (['bodyweight', 'noExternalLoad'].includes(ex.loadType) && (!ex.equipment || ex.equipment === 'Peso corporal')) return 'Sin equipo';
+  if (ex.equipment && ex.equipment !== 'Sin especificar') return ex.equipment;
+  return data.suggestedLoad(ex)?.equipment ?? 'Equipo libre';
+};
+
+/** Variaciones con otro equipo: ver cómo se hace, usarla (hoy o en la rutina) y agregar o quitar las propias. */
+function Variations({ exercise, onUse, useLabel }) {
+  const [open, setOpen] = useState(null);
+  const [linking, setLinking] = useState(false);
+  const items = data.variationsFor(exercise);
+  const use = (v) => onUse(v.exercise ?? run(() => data.exerciseNamed(v.name)));
+  return html`
+    <p class="muted small" style="margin:12px 4px 8px">¿Tu gimnasio no tiene este equipo? Estas variaciones trabajan lo mismo.</p>
+    <div class="list">
+      ${items.length === 0 && html`<div class="row static muted small">Todavía no hay variaciones para este ejercicio.</div>`}
+      ${items.map((v) => html`<div class="row static variation">
+        <${ExerciseVisual} exercise=${v.preview} compact onClick=${() => setOpen(v)} />
+        <div class="spacer">
+          <div class="title">${N(v.name)}</div>
+          <span class="badge">${equipmentLabel(v.preview)}</span>
+          <div class="hstack wrap variation-actions">
+            <button class="btn plain" onClick=${() => setOpen(v)}>Ver cómo se hace</button>
+            ${onUse && html`<button class="btn" onClick=${() => use(v)}>${useLabel}</button>`}
+            ${v.custom && exercise.id && v.exercise && html`<button class="btn plain danger" onClick=${() => run(() => data.unlinkVariation(exercise.id, v.exercise.id))}>Quitar</button>`}
+          </div>
+        </div>
+      </div>`)}
+    </div>
+    ${exercise.id && html`<button class="btn block" style="margin-top:12px" onClick=${() => setLinking(true)}><${Icon} name="plus" /> Agregar variación</button>
+      <p class="muted small center">Elige un ejercicio de la biblioteca o crea uno nuevo; le puedes poner su foto, GIF o video.</p>`}
+    ${open && html`<${GuideSheet} exercise=${open.exercise ?? open.preview} nested onClose=${() => setOpen(null)} />`}
+    ${linking && html`<${ExercisePicker} title="Agregar variación" onClose=${() => setLinking(false)}
+      onPick=${(ex) => { if (run(() => { data.linkVariation(exercise.id, ex.id); return true; })) { setLinking(false); toast(`${N(ex.name)} agregada como variación`); } }} />`}`;
 }
 
 const QUICK_LOADS = [['totalWeight', 'Barra / peso libre'], ['dumbbellPerHand', 'Mancuernas'], ['machine', 'Máquina'], ['cable', 'Polea'], ['bodyweight', 'Peso corporal'], ['bodyweightPlusLoad', 'Corporal + lastre']];
@@ -233,7 +304,7 @@ const EQUIPMENT_OF = { totalWeight: 'Barra', dumbbellPerHand: 'Mancuernas', mach
 export function LoadTypeReview({ onClose }) {
   const pending = data.exercisesWithoutLoad();
   const withHint = pending.map((e) => [e, data.suggestedLoad(e)]).filter(([, hint]) => hint);
-  const apply = (e, loadType, equipment) => run(() => { data.setExerciseLoad(e.id, loadType, equipment ?? EQUIPMENT_OF[loadType]); toast(`${e.name}: ${D.LOAD_TYPES[loadType]}`); });
+  const apply = (e, loadType, equipment) => run(() => { data.setExerciseLoad(e.id, loadType, equipment ?? EQUIPMENT_OF[loadType]); toast(`${N(e.name)}: ${D.LOAD_TYPES[loadType]}`); });
   const applyAll = () => run(() => {
     for (const [e, hint] of withHint) data.setExerciseLoad(e.id, hint.loadType, hint.equipment);
     toast(`${withHint.length} ejercicios actualizados`);
@@ -247,7 +318,7 @@ export function LoadTypeReview({ onClose }) {
           ${pending.map((e) => {
             const hint = data.suggestedLoad(e);
             return html`<div class="card">
-              <div class="hstack" style="margin-bottom:8px"><${MuscleTile} muscle=${e.primaryMuscle} /><b class="spacer">${e.name}</b></div>
+              <div class="hstack" style="margin-bottom:8px"><${MuscleTile} muscle=${e.primaryMuscle} /><b class="spacer">${N(e.name)}</b></div>
               <div class="chips wrap" style="margin:0">${QUICK_LOADS.map(([k, label]) => html`
                 <button class=${`chip ${hint?.loadType === k ? 'suggested' : ''}`} onClick=${() => apply(e, k, hint?.loadType === k ? hint.equipment : null)}>
                   ${label}${hint?.loadType === k ? ' · sugerido' : ''}</button>`)}</div>
@@ -286,7 +357,10 @@ export function ExerciseVisual({ exercise, editable = false, compact = false, on
     e.target.value = '';
     if (!file) return;
     setBusy(true);
-    try { await addExerciseMedia(exercise.id, file, activeProfileID()); toast('Guardado para toda la familia'); }
+    try {
+      const target = exercise.id ? exercise : data.exerciseNamed(exercise.name);
+      await addExerciseMedia(target.id, file, activeProfileID()); toast('Guardado para toda la familia');
+    }
     catch (error) { toast(error instanceof data.UserError ? error.message : `No se pudo guardar: ${error.message ?? error}`); }
     setBusy(false);
   }
@@ -299,12 +373,12 @@ export function ExerciseVisual({ exercise, editable = false, compact = false, on
   if (!has && !editable) return null;
   const media = custom
     ? (url ? (custom.kind === 'video'
-        ? html`<video src=${url} autoplay muted loop playsinline aria-label=${`Video de ${exercise.name}`}></video>`
-        : html`<img src=${url} alt=${`Cómo se hace ${exercise.name}`} />`)
+        ? html`<video src=${url} autoplay muted loop playsinline aria-label=${`Video de ${N(exercise.name)}`}></video>`
+        : html`<img src=${url} alt=${`Cómo se hace ${N(exercise.name)}`} />`)
       : html`<span class="visual-loading">Cargando…</span>`)
-    : frames ? frames.map((src, i) => html`<img src=${src} alt=${i === 0 ? `Cómo se hace ${exercise.name}` : ''} class=${i === frame ? 'on' : ''} loading="lazy" />`)
+    : frames ? frames.map((src, i) => html`<img src=${src} alt=${i === 0 ? `Cómo se hace ${N(exercise.name)}` : ''} class=${i === frame ? 'on' : ''} loading="lazy" />`)
     : html`<span class="visual-empty">📷<br />Sin imagen</span>`;
-  if (compact) return has ? html`<button class="visual compact" onClick=${onClick} aria-label=${`Ver cómo se hace ${exercise.name}`}>${media}</button>` : null;
+  if (compact) return has ? html`<button class="visual compact" onClick=${onClick} aria-label=${`Ver cómo se hace ${N(exercise.name)}`}>${media}</button>` : null;
   return html`
     <div class="visual-wrap">
       <div class=${`visual ${frames && !custom ? 'frames' : ''}`} onClick=${() => frames && !custom && calm() && setFrame((f) => (f + 1) % frames.length)}>${media}</div>

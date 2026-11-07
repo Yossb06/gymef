@@ -1,6 +1,7 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
+import { N } from '../catalog.js';
 import { Page, Section, Row, Segmented, Stat, LineChart } from '../ui.js';
 
 const periodState = { value: 'threeMonths' };
@@ -20,16 +21,16 @@ export function ProgressView({ owner }) {
       </div>
       <p class="muted small">${D.volumeLabel(o.volume)}</p>
       ${intel.events.length > 0 && html`<${Section} title="Destacados">
-        <div class="list">${intel.events.map((e) => html`<${Row} icon=${e.icon} title=${`${e.title} · ${e.group.name}`} sub=${e.detail} href=${`progreso/${encodeURIComponent(e.group.id)}`} />`)}</div><//>`}
+        <div class="list">${intel.events.map((e) => html`<${Row} icon=${e.icon} title=${`${e.title} · ${N(e.group.name)}`} sub=${e.detail} href=${`progreso/${encodeURIComponent(e.group.id)}`} />`)}</div><//>`}
       <${Section} title="Ejercicios">
         <div class="list">
           ${intel.analyses.length === 0 && html`<div class="row static muted">Completa entrenamientos para ver tu progreso.</div>`}
-          ${intel.analyses.map((a) => html`<${Row} title=${a.group.name} sub=${D.keyConfigLabel(a.group.key)} href=${`progreso/${encodeURIComponent(a.group.id)}`}
+          ${intel.analyses.map((a) => html`<${Row} title=${N(a.group.name)} sub=${D.keyConfigLabel(a.group.key)} href=${`progreso/${encodeURIComponent(a.group.id)}`}
             right=${html`<span class=${`badge ${a.trend.state === 'progressing' ? 'on' : ''}`}>${D.TREND_TITLES[a.trend.state]}</span>`} />`)}
         </div>
       <//>
       ${intel.records.length > 0 && html`<${Section} title="Récords del periodo">
-        <div class="list">${intel.records.slice(0, 10).map((r) => html`<${Row} icon="🏆" title=${r.set.name}
+        <div class="list">${intel.records.slice(0, 10).map((r) => html`<${Row} icon="🏆" title=${N(r.set.name)}
           sub=${`${r.metric === 'load' ? D.setProgressLabel(r.set) : `1RM estimado ${D.display(r.value)} ${D.keyLoadLabel(r.set.key)}`} · ${D.formatDate(r.set.date)}`} />`)}</div><//>`}
     <//>`;
 }
@@ -53,10 +54,10 @@ export function ExerciseProgress({ owner, id }) {
   const visits = [...bySession.values()].sort((a, b) => b[0].date - a[0].date);
   const suffix = current === 'reps' ? ' reps' : ` ${D.keyLoadLabel(group.key)}`;
   return html`
-    <${Page} title=${group.name} backTo="progreso"
+    <${Page} title=${N(group.name)} backTo="progreso"
       right=${exerciseID && data.exercise(exerciseID) && html`<a class="btn plain" href=${`#/ejercicio/${exerciseID}`}>Ficha</a>`}>
       <div class="card">
-        <div style="font-size:20px;font-weight:700">${group.name}</div>
+        <div style="font-size:20px;font-weight:700">${N(group.name)}</div>
         <div class="small muted">${D.keyConfigLabel(group.key)}</div>
         <div style="margin-top:8px"><span class=${`badge ${t.state === 'progressing' ? 'on' : ''}`}>${D.TREND_TITLES[t.state]}</span></div>
         <div class="small muted" style="margin-top:6px">${t.explanation}</div>

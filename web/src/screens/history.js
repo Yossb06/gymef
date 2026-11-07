@@ -1,6 +1,7 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
+import { N } from '../catalog.js';
 import { store } from '../store.js';
 import { Page, Section, Row, Sheet, Field, run, go, toast, confirmDialog } from '../ui.js';
 import { ExercisePicker } from './exercises.js';
@@ -50,7 +51,7 @@ export function HistoryDetail({ owner, id }) {
     return { weight: last?.weight ?? 0, reps: last?.reps ?? we.repsMin, loadType: we.loadType, unit: last?.unit ?? data.unitFor(owner, we.originalExerciseID) };
   };
   const removeExercise = async (we) => {
-    if (await confirmDialog(`¿Quitar ${we.name}?`, { message: 'Se borrarán sus series de este entrenamiento.', confirm: 'Quitar', danger: true })) run(() => data.deleteWorkoutExercise(we.id, owner));
+    if (await confirmDialog(`¿Quitar ${N(we.name)}?`, { message: 'Se borrarán sus series de este entrenamiento.', confirm: 'Quitar', danger: true })) run(() => data.deleteWorkoutExercise(we.id, owner));
   };
   return html`
     <${Page} title=${session.dayNameSnapshot} backTo="historial" right=${html`<button class="btn plain" onClick=${() => setEditing(!editing)}>${editing ? 'Listo' : 'Editar'}</button>`}>
@@ -59,7 +60,7 @@ export function HistoryDetail({ owner, id }) {
           <div class="small muted">${D.formatTime(session.startedAt)}${session.endedAt ? `–${D.formatTime(session.endedAt)}` : ''}</div></div>
           <button class="btn" onClick=${() => setSheet('dates')}>Fechas</button></div>
         ${exercises.map((we) => html`
-          <${Section} title=${we.name + (we.isReplaced ? ' · sustituido' : '')}
+          <${Section} title=${N(we.name) + (we.isReplaced ? ' · sustituido' : '')}
             right=${html`<button class="btn plain danger" onClick=${() => removeExercise(we)}>Quitar</button>`}>
             <div class="list">
               ${data.setsOf(we.id).map((r) => html`<div class="row static"><span class="badge on">${r.order}</span>

@@ -13,6 +13,7 @@ import { BodyView } from './screens/body.js';
 import { MoreView } from './screens/more.js';
 import { cloud, activeProfileID } from './session.js';
 import { applyAppearance } from './theme.js';
+import { setSpanishNames } from './catalog.js';
 
 const TABS = [['', 'Inicio', 'home'], ['rutinas', 'Rutinas', 'routines'], ['progreso', 'Progreso', 'progress'], ['historial', 'Historial', 'history'], ['mas', 'Más', 'more']];
 function TabBar({ current }) {
@@ -67,6 +68,7 @@ function Main() {
   const owner = activeProfileID();
   if (!owner || !data.profile(owner)) return html`<${ProfilePicker} />`;
   applyAppearance(data.profile(owner).appearance, { celebrate: data.birthdaysToday().length > 0 });
+  setSpanishNames(data.profile(owner).appearance?.names === 'es');
   return html`<${Router} owner=${owner} key=${owner} />`;
 }
 

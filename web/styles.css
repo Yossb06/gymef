@@ -418,3 +418,15 @@ html.host-badge .update-banner { bottom: calc(100px + var(--badge-lane) + env(sa
 .visual-empty, .visual-loading { color: #8e8e93; font-size: 14px; text-align: center; }
 .visual-actions { margin-top: 10px; flex-wrap: wrap; }
 .visual-actions .btn { min-height: 40px; }
+
+/* Guía: músculos, cuidados y variaciones */
+.muscle-secondary { background: var(--card-2); color: var(--text); }
+.safety-list { margin: 0; padding-left: 20px; }
+.safety-list li { margin-bottom: 8px; }
+.safety-list li::marker { color: var(--ok); }
+.safety-list.general li::marker { color: var(--accent); }
+.variation { align-items: flex-start; }
+.variation .badge { margin-top: 4px; }
+.variation-actions { margin-top: 6px; gap: 4px; }
+.variation-actions .btn { min-height: 34px; padding: 4px 10px; font-size: 14px; }
+.variation .visual.compact { width: 84px; }

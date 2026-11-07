@@ -1,6 +1,7 @@
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
+import { N } from '../catalog.js';
 import { store, newId } from '../store.js';
 import { Page, Section, Row, Sheet, Field, Stepper, RestTimer, restTimer, go, replaceRoute, run, confirmDialog, useTick, useWakeLock, toast, Icon, Tile, ProgressRing, Confetti } from '../ui.js';
 import { themeEmoji } from '../theme.js';
@@ -17,7 +18,7 @@ function stateIcon(we) {
   return html`<span class=${`icon tile status ${n ? 'partial' : ''}`} style=${`--tint:${D.muscleColor(muscle)}`} aria-hidden="true">${n}/${we.targetSets}</span>`;
 }
 const ExerciseLabel = ({ we, onClick, href, next }) => html`
-  <${Row} icon=${stateIcon(we)} title=${we.name} sub=${`${data.setsOf(we.id).length} / ${we.targetSets} series · ${data.stateLabel(we)}`} onClick=${onClick} href=${href}
+  <${Row} icon=${stateIcon(we)} title=${N(we.name)} sub=${`${data.setsOf(we.id).length} / ${we.targetSets} series · ${data.stateLabel(we)}`} onClick=${onClick} href=${href}
     right=${next && html`<span class="badge on">Siguiente</span>`} />`;
 /** Primer ejercicio sin terminar, empezando después de `from` y dando la vuelta. */
 function nextPending(exercises, from = -1) {
@@ -34,7 +35,7 @@ export function AddToSession({ owner, session, afterOrder = null, onClose, onAdd
       <span>Guardarlo también en la rutina (${day.name}) para las próximas veces</span></label>`}
     onPick=${(ex, rx) => {
       const we = run(() => data.addExerciseToSession(session.id, owner, ex.id, rx, { afterOrder, alsoRoutine }));
-      if (we) { toast(`${ex.name} añadido${alsoRoutine && day ? ' y guardado en la rutina' : ''}`); onAdded?.(we); }
+      if (we) { toast(`${N(ex.name)} añadido${alsoRoutine && day ? ' y guardado en la rutina' : ''}`); onAdded?.(we); }
     }} />`;
 }
 
@@ -74,7 +75,7 @@ export function SessionView({ owner }) {
   }
   return html`
     <${Page} title=${active.dayNameSnapshot} backTo="" dock=${html`<${RestTimer} />
-      ${next ? html`<button class="btn primary block big" onClick=${() => go(`entreno/${next.id}`)}><${Icon} name="play" /> ${data.setsOf(next.id).length ? 'Continuar' : 'Empezar'}: ${next.name}</button>`
+      ${next ? html`<button class="btn primary block big" onClick=${() => go(`entreno/${next.id}`)}><${Icon} name="play" /> ${data.setsOf(next.id).length ? 'Continuar' : 'Empezar'}: ${N(next.name)}</button>`
         : html`<button class="btn primary block big" onClick=${finish}><${Icon} name="check" /> Finalizar entrenamiento</button>`}`}
       right=${html`<button class="btn plain danger" onClick=${cancel}>Cancelar</button>`}>
       <div class="hero hstack">
@@ -121,9 +122,9 @@ export function WorkoutSummary({ owner, session, celebrate = false }) {
     </div>
     <p class="muted small">${D.volumeLabel(vol)}</p>
     <${MoodNote} owner=${owner} session=${session} />
-    ${records.length > 0 && html`<${Section} title="Récords"><div class="list">${records.map((r) => html`<${Row} icon="🏆" title=${r.set.name} sub=${r.metric === 'load' ? `Nuevo PR · ${D.setProgressLabel(r.set)}` : `1RM estimado · ${D.display(r.value)} ${D.keyLoadLabel(r.set.key)}`} />`)}</div><//>`}
+    ${records.length > 0 && html`<${Section} title="Récords"><div class="list">${records.map((r) => html`<${Row} icon="🏆" title=${N(r.set.name)} sub=${r.metric === 'load' ? `Nuevo PR · ${D.setProgressLabel(r.set)}` : `1RM estimado · ${D.display(r.value)} ${D.keyLoadLabel(r.set.key)}`} />`)}</div><//>`}
     <${Section} title="Ejercicios">
-      <div class="list">${exercises.map((we) => html`<${Row} title=${we.name + (we.isReplaced ? ' (sustituido)' : '')} sub=${data.setsOf(we.id).map(D.recordLabel).join(' · ') || 'Sin series'} />`)}</div>
+      <div class="list">${exercises.map((we) => html`<${Row} title=${N(we.name) + (we.isReplaced ? ' (sustituido)' : '')} sub=${data.setsOf(we.id).map(D.recordLabel).join(' · ') || 'Sin series'} />`)}</div>
     <//>`;
 }
 
@@ -227,7 +228,7 @@ function ExerciseScreen({ owner, we }) {
     }
   }
   async function removeExercise() {
-    if (!(await confirmDialog(`¿Quitar ${we.name} de hoy?`, { message: 'Tu rutina no cambia.', confirm: 'Quitar', danger: true }))) return;
+    if (!(await confirmDialog(`¿Quitar ${N(we.name)} de hoy?`, { message: 'Tu rutina no cambia.', confirm: 'Quitar', danger: true }))) return;
     const target = nextPending(exercises.filter((e) => e.id !== we.id), position - 1);
     if (run(() => { data.removeFromSession(we.id, owner); return true; })) replaceRoute(target ? `entreno/${target.id}` : 'entreno');
   }
@@ -255,15 +256,15 @@ function ExerciseScreen({ owner, we }) {
       <button class="btn primary block big" disabled=${!!invalid} onClick=${confirm}>✓ Completar serie</button>`
     : canRecord && html`<div class="ok center">✓ Objetivo de series completado</div>
       <div class="hstack"><button class="btn block" onClick=${() => setExtra(true)}>+ Añadir serie</button>
-      ${pending ? html`<button class="btn primary block" onClick=${() => replaceRoute(`entreno/${pending.id}`)}>Siguiente: ${pending.name} ›</button>`
+      ${pending ? html`<button class="btn primary block" onClick=${() => replaceRoute(`entreno/${pending.id}`)}>Siguiente: ${N(pending.name)} ›</button>`
         : html`<button class="btn primary block" onClick=${() => replaceRoute('entreno')}>Ver entrenamiento ›</button>`}</div>`}`;
 
   return html`
-    <${Page} title=${we.name} backTo="entreno" dock=${dock}
+    <${Page} title=${N(we.name)} backTo="entreno" dock=${dock}
       right=${we.originalExerciseID && html`<button class="btn plain" onClick=${() => go(`ejercicio/${we.originalExerciseID}`)}>Ficha</button>`}>
       <div class="card stack exercise-head">
         <div class="hstack" style="align-items:flex-start"><div class="spacer">
-          <div style="font-size:22px;font-weight:800;letter-spacing:-0.01em">${we.name}</div>
+          <div style="font-size:22px;font-weight:800;letter-spacing:-0.01em">${N(we.name)}</div>
           <div class="muted"><b>${we.targetSets} × ${we.repsMin}–${we.repsMax}</b>${we.restSeconds ? ` · descanso ${D.display(we.restSeconds / 60)} min` : ''}</div>
           ${data.exercise(we.originalExerciseID) && html`<button class="link-btn" onClick=${() => setSheet('guide')}>¿No sabes cómo hacerlo? <b>Ver cómo se hace</b></button>`}
           ${we.isReplaced && html`<div class="small muted">Sustituido · series conservadas</div>`}
@@ -307,6 +308,8 @@ function ExerciseScreen({ owner, we }) {
         <div class="list">
           <${Row} title=${D.LOAD_TYPES[we.loadType] + (we.isUnilateral ? ' · Reps por lado' : '')} sub=${[we.equipment, we.note].filter(Boolean).join(' · ')} />
           ${canRecord && we.originalExerciseID && html`<${Row} title="Tu configuración" sub="Unidad, incremento, descanso, asiento" onClick=${() => setSheet('pref')} />`}
+          ${canRecord && we.originalExerciseID && data.exercise(we.originalExerciseID) && html`<${Row} icon=${html`<${Tile} text="⇄" color="#5e5ce6" />`}
+            title="¿No tienes este equipo?" sub="Ver variaciones con mancuernas, máquina, polea o sin equipo" onClick=${() => setSheet('variations')} />`}
           ${canRecord && html`<${Row} icon=${html`<${Tile} name="swap" color="#0a84ff" />`} title="Cambiar ejercicio" sub="Solo esta sesión. La rutina original no cambia." onClick=${() => setSheet('replace')} />`}
           ${session?.status === 'active' && html`<${Row} icon=${html`<${Tile} name="plus" color="#30d158" />`} title="Añadir un ejercicio después de este" sub="Solo hoy o también en tu rutina" onClick=${() => setSheet('add')} />`}
           ${canRecord && records.length === 0 && html`<${Row} icon=${html`<${Tile} name="trash" color="#ff453a" />`} title="Quitar de este entrenamiento" sub="Hoy no lo vas a hacer" onClick=${removeExercise} />`}
@@ -320,7 +323,9 @@ function ExerciseScreen({ owner, we }) {
     ${sheet === 'replace' && html`<${ExercisePicker} title="Sustituir en esta sesión" onClose=${() => setSheet(null)}
       onPick=${(ex) => { const next = run(() => data.replaceInSession(we.id, owner, ex.id)); setSheet(null); if (next) replaceRoute(`entreno/${next.id}`); }} />`}
     ${sheet === 'loads' && html`<${LoadTypeReview} onClose=${() => setSheet(null)} />`}
-    ${sheet === 'guide' && html`<${GuideSheet} exercise=${data.exercise(we.originalExerciseID)} onClose=${() => setSheet(null)} />`}
+    ${(sheet === 'guide' || sheet === 'variations') && data.exercise(we.originalExerciseID) && html`<${GuideSheet} exercise=${data.exercise(we.originalExerciseID)} tab=${sheet === 'variations' ? 'variations' : 'how'}
+      onClose=${() => setSheet(null)} useLabel="Hacer este hoy"
+      onUse=${canRecord ? (alt) => { const next = alt && run(() => data.replaceInSession(we.id, owner, alt.id)); setSheet(null); if (next) { toast(`Hoy: ${N(alt.name)}`); replaceRoute(`entreno/${next.id}`); } } : null} />`}
     ${sheet === 'pref' && html`<${PreferenceSheet} owner=${owner} exerciseID=${we.originalExerciseID} onClose=${() => setSheet(null)} />`}
     ${sheet?.edit && html`<${SetEditor} record=${sheet.edit} onClose=${() => setSheet(null)}
       onSave=${(w, r) => { run(() => { data.updateSet(sheet.edit.id, owner, w, r, null, { active: canRecord }); setSheet(null); toast('Serie actualizada'); }); }} />`}`;

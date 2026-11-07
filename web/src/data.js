@@ -2,6 +2,7 @@
 // ExercisePreferenceStore y BodyMeasurementStore). Toda operación personal exige un perfil explícito.
 import { store, newId } from './store.js';
 import * as D from './domain.js';
+import { altEntry, variationNames, spanishName } from './catalog.js';
 
 export class UserError extends Error {}
 const fail = (message) => { throw new UserError(message); };
@@ -191,11 +192,67 @@ export function addEntry(dayID, owner, exerciseID, { sets = 3, repsMin = 8, reps
 export function addEntries(dayID, owner, exerciseIDs, prescription) {
   return store.batch(() => exerciseIDs.map((id) => addEntry(dayID, owner, id, prescription)));
 }
-function exerciseNamed(name) {
-  const found = exercises().find((e) => D.normalizedName(e.name) === D.normalizedName(name));
+/** Ejercicio de la biblioteca con ese nombre; si no existe, lo crea con los datos de la biblioteca inicial o del catálogo de variaciones. */
+export function exerciseNamed(name) {
+  const found = findExercise(name);
   if (found) return found;
-  const [, primaryMuscle, equipment, loadType] = D.SEED_LIBRARY.find(([n]) => n === name) ?? [];
-  return saveExercise({ name, primaryMuscle, equipment, loadType });
+  const seed = D.SEED_LIBRARY.find(([n]) => D.normalizedName(n) === D.normalizedName(name));
+  const alt = altEntry(name);
+  const [, primaryMuscle, equipment, loadType, isUnilateral] = seed ?? alt ?? [];
+  return saveExercise({ name, primaryMuscle, equipment, loadType, isUnilateral: !!isUnilateral });
+}
+// También reconoce el ejercicio por su nombre en español (p. ej. «Sentadilla goblet» → «Goblet saquat»), para no duplicarlo.
+export function findExercise(name) {
+  const key = D.normalizedName(name ?? '');
+  const all = store.all('exercises');
+  // Mismo nombre en español = mismo ejercicio («Seated leg curl» y «Sitting Leg Curl» son «Curl femoral sentado»).
+  const es = D.normalizedName(spanishName(name) ?? name);
+  const esOf = (e) => D.normalizedName(spanishName(e.name) ?? e.name);
+  return all.find((e) => D.normalizedName(e.name) === key)
+    ?? all.find((e) => esOf(e) === key || esOf(e) === es) ?? null;
+}
+
+/**
+ * Variaciones de un ejercicio: las del catálogo (con otro equipo) y las que la familia relacionó a mano.
+ * Cada una trae el ejercicio de la biblioteca si ya existe, o los datos del catálogo para crearlo al elegirla.
+ */
+export function variationsFor(ex) {
+  if (!ex) return [];
+  const items = [];
+  // Clave por nombre en español: dos nombres originales del mismo ejercicio (Seated/Sitting leg curl) salen una vez.
+  const keyOf = (name) => D.normalizedName(spanishName(name) ?? name);
+  const seen = new Set([keyOf(ex.name)]);
+  const add = (name, custom) => {
+    const key = D.normalizedName(name);
+    if (seen.has(keyOf(name))) return;
+    seen.add(keyOf(name));
+    const existing = findExercise(name);
+    if (existing && existing.id === ex.id) return;
+    const row = altEntry(name) ?? D.SEED_LIBRARY.find(([n]) => D.normalizedName(n) === key);
+    const [, primaryMuscle, equipment, loadType] = row ?? [];
+    items.push({ name: existing?.name ?? name, exercise: existing, custom,
+      preview: existing ?? { name, primaryMuscle: primaryMuscle ?? ex.primaryMuscle, equipment: equipment ?? '', loadType: loadType ?? 'unspecified' } });
+  };
+  for (const id of ex.variations ?? []) { const other = exercise(id); if (other) add(other.name, true); }
+  for (const name of variationNames(ex.name)) add(name, false);
+  return items;
+}
+/** Relaciona dos ejercicios como variaciones entre sí (lo ven todos los perfiles). */
+export function linkVariation(aID, bID) {
+  const a = exercise(aID), b = exercise(bID);
+  if (!a || !b || aID === bID) fail('Elige otro ejercicio.');
+  store.batch(() => {
+    store.update('exercises', aID, { variations: [...new Set([...(a.variations ?? []), bID])] });
+    store.update('exercises', bID, { variations: [...new Set([...(b.variations ?? []), aID])] });
+  });
+}
+export function unlinkVariation(aID, bID) {
+  store.batch(() => {
+    for (const [x, y] of [[aID, bID], [bID, aID]]) {
+      const ex = exercise(x);
+      if (ex?.variations?.includes(y)) store.update('exercises', x, { variations: ex.variations.filter((id) => id !== y) });
+    }
+  });
 }
 /** Crea una rutina completa desde una plantilla; usa los ejercicios de la biblioteca (o los crea si faltan). */
 export function createRoutineFromTemplate(owner, templateID) {
@@ -335,6 +392,7 @@ export function replaceInSession(weID, owner, exerciseID, { active = true } = {}
   const old = requireWorkoutExercise(weID, owner, { active });
   if (old.isReplaced) fail('El entrenamiento ya no admite nuevas series.');
   const ex = exercise(exerciseID);
+  if (!ex) fail('El ejercicio ya no está disponible.');
   return store.batch(() => {
     const done = setsOf(weID).length;
     const next = snapshotOf(ex, old.sessionID, { order: old.order, sets: Math.max(1, old.targetSets - done), repsMin: old.repsMin, repsMax: old.repsMax, restSeconds: old.restSeconds, note: old.note });

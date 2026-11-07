@@ -4,8 +4,10 @@ import { store, newId } from './store.js';
 import { normalizedName } from './domain.js';
 import { UserError } from './data.js';
 import { EXERCISE_IMAGES } from './exercise-images.js';
+import { EXERCISE_ILLUSTRATIONS } from './exercise-illustrations.js';
 
-const BUILT_IN = new Map(Object.entries(EXERCISE_IMAGES).map(([name, frames]) => [normalizedName(name), frames]));
+// Fotos de dominio público y, para lo que no tiene foto, ilustraciones animadas propias (SVG).
+const BUILT_IN = new Map(Object.entries({ ...EXERCISE_IMAGES, ...EXERCISE_ILLUSTRATIONS }).map(([name, frames]) => [normalizedName(name), frames]));
 /** Fotos incluidas (inicio y final) para el ejercicio, o null. */
 export const builtInFrames = (exercise) => (exercise ? BUILT_IN.get(normalizedName(exercise.name)) ?? null : null);
 

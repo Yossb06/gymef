@@ -1,6 +1,7 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
+import { N } from '../catalog.js';
 import { store } from '../store.js';
 import { selectProfile } from '../session.js';
 import { Page, Section, Row, Sheet, Stat, Tile, Icon, Confetti, ProgressRing, Segmented, go, run, toast, useTick } from '../ui.js';
@@ -102,15 +103,12 @@ export function Home({ owner }) {
       <${FamilyFeed} owner=${owner} />
       ${events.length > 0 && html`
         <${Section} title="Progreso reciente">
-          <div class="list">${events.map((e) => html`<${Row} icon=${html`<${Tile} name=${e.icon === '🏆' ? 'trophy' : 'progress'} color=${e.icon === '🏆' ? '#ffb340' : '#30d158'} />`} title=${`${e.title} · ${e.group.name}`} sub=${e.detail} href=${`progreso/${encodeURIComponent(e.group.id)}`} />`)}</div>
+          <div class="list">${events.map((e) => html`<${Row} icon=${html`<${Tile} name=${e.icon === '🏆' ? 'trophy' : 'progress'} color=${e.icon === '🏆' ? '#ffb340' : '#30d158'} />`} title=${`${e.title} · ${N(e.group.name)}`} sub=${e.detail} href=${`progreso/${encodeURIComponent(e.group.id)}`} />`)}</div>
         <//>`}
       <${Section} title="Tu gimnasio">
         <div class="list">
-          <${Row} icon=${html`<${Tile} name="routines" color="#0a84ff" />`} title="Rutinas" sub="Crear, copiar y ajustar" href="rutinas" />
-          <${Row} icon=${html`<${Tile} name="dumbbell" color="#ff9f0a" />`} title="Ejercicios" sub="Biblioteca y configuración" href="ejercicios" />
-          <${Row} icon=${html`<${Tile} name="progress" color="#30d158" />`} title="Progreso" sub="Marcas y evolución" href="progreso" />
-          <${Row} icon=${html`<${Tile} name="history" color="#5e5ce6" />`} title="Historial" sub="Consultar y corregir" href="historial" />
-          <${Row} icon=${html`<${Tile} name="body" color="#ff375f" />`} title="Progreso corporal" sub="Medidas y fotos" href="cuerpo" />
+          <${Row} icon=${html`<${Tile} name="dumbbell" color="#ff9f0a" />`} title="Ejercicios" sub="Cómo se hacen, fotos y variaciones" href="ejercicios" />
+          <${Row} icon=${html`<${Tile} name="body" color="#ff375f" />`} title="Progreso corporal" sub="Peso, medidas y fotos" href="cuerpo" />
           ${missingLoads > 0 && html`<${Row} icon=${html`<${Tile} text="💡" color="#ffd60a" />`} title="Completar tipo de carga"
             sub=${`${missingLoads} ${missingLoads === 1 ? 'ejercicio' : 'ejercicios'}: así recibes sugerencias y récords`} onClick=${() => setSheet('loads')} />`}
         </div>

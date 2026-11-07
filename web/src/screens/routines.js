@@ -1,6 +1,7 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
+import { N } from '../catalog.js';
 import { Page, Section, Row, Sheet, Field, Input, Icon, run, go, toast, confirmDialog, promptDialog } from '../ui.js';
 import { ExercisePicker, GuideSheet, MuscleTile } from './exercises.js';
 import { startWorkout } from './home.js';
@@ -50,7 +51,7 @@ export function RoutinesList({ owner }) {
           </button>
           <button class="template-card" onClick=${() => { setCreating(false); setCopying(true); }}>
             <span class="template-icon plain"><${Icon} name="copy" /></span>
-            <span class="grow"><b>Copiar de otro perfil</b><span class="muted small">Por ejemplo, la rutina de Fran.</span></span>
+            <span class="grow"><b>Copiar de otro perfil</b><span class="muted small">Empieza con la rutina de alguien de tu familia y ajústala a ti.</span></span>
           </button>
         </div>
       <//>`}
@@ -146,11 +147,11 @@ export function DayDetail({ owner, id }) {
             return html`<div class="row static">
               ${ex && html`<${MuscleTile} muscle=${ex.primaryMuscle} />`}
               <button class="grow" style="background:none;border:0;text-align:left;padding:0;cursor:pointer;color:inherit" onClick=${() => setSheet({ entry: e })}>
-                <div class="title">${ex?.name ?? 'Ejercicio no disponible'}</div>
+                <div class="title">${N(ex?.name) ?? 'Ejercicio no disponible'}</div>
                 <div class="sub">${e.sets} × ${e.repsMin}–${e.repsMax}${e.restSeconds ? ` · ${D.display(e.restSeconds / 60)} min` : ''}${e.note ? ` · ${e.note}` : ''}</div>
                 ${previousLine(owner, e.exerciseID)}
               </button>
-              ${ex && html`<button class="help-btn" aria-label=${`Cómo se hace ${ex.name}`} onClick=${() => setSheet({ guide: ex })}>?</button>`}
+              ${ex && html`<button class="help-btn" aria-label=${`Cómo se hace ${N(ex.name)}`} onClick=${() => setSheet({ guide: ex, entryID: e.id })}>?</button>`}
               <button class="icon-btn" aria-label="Subir" disabled=${i === 0} onClick=${() => run(() => data.moveEntry(e.id, owner, -1))}>↑</button>
               <button class="icon-btn" aria-label="Bajar" disabled=${i === entries.length - 1} onClick=${() => run(() => data.moveEntry(e.id, owner, 1))}>↓</button>
             </div>`;
@@ -167,7 +168,8 @@ export function DayDetail({ owner, id }) {
     ${sheet === 'add' && html`<${ExercisePicker} title="Añadir ejercicios" multiple onClose=${() => setSheet(null)}
       onPickMany=${(ids, rx) => { const added = run(() => data.addEntries(id, owner, ids, rx)); if (added) { setSheet(null); toast(`${added.length} ${added.length === 1 ? 'ejercicio añadido' : 'ejercicios añadidos'}`); } }} />`}
     ${sheet?.entry && html`<${EntryEditor} owner=${owner} entry=${sheet.entry} onClose=${() => setSheet(null)} onReplace=${() => setSheet({ replacing: sheet.entry })} />`}
-    ${sheet?.guide && html`<${GuideSheet} exercise=${sheet.guide} onClose=${() => setSheet(null)} />`}
+    ${sheet?.guide && html`<${GuideSheet} exercise=${sheet.guide} onClose=${() => setSheet(null)} useLabel="Cambiar en mi rutina"
+      onUse=${(alt) => { if (alt && run(() => { data.replaceEntry(sheet.entryID, owner, alt.id); return true; })) { toast(`Cambiado por ${N(alt.name)} en tu rutina`); setSheet(null); } }} />`}
     ${sheet?.replacing && html`<${ExercisePicker} title="Sustituir ejercicio" onClose=${() => setSheet(null)} onPick=${(ex) => { run(() => data.replaceEntry(sheet.replacing.id, owner, ex.id)); setSheet(null); }} />`}`;
 }
 
@@ -189,7 +191,7 @@ function EntryEditor({ owner, entry, onClose, onReplace }) {
   };
   const num = (setter) => (v) => setter(v.replace(/\D/g, ''));
   return html`
-    <${Sheet} title=${ex?.name ?? 'Ejercicio'} onClose=${onClose} right=${html`<button class="btn plain" onClick=${save}>Guardar</button>`}>
+    <${Sheet} title=${N(ex?.name) ?? 'Ejercicio'} onClose=${onClose} right=${html`<button class="btn plain" onClick=${save}>Guardar</button>`}>
       <div class="card">
         <div class="grid2" style="grid-template-columns:1fr 1fr 1fr">
           <${Field} label="Series"><${Input} inputmode="numeric" value=${sets} onInput=${num(setSets)} /><//>

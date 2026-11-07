@@ -57,6 +57,8 @@ export function MoreView({ owner }) {
         <div class="card stack">
           <div><div class="small muted" style="margin:0 4px 6px">Modo</div>
             <${Segmented} options=${MODES} value=${look.mode} onChange=${(mode) => setLook({ mode })} /></div>
+          <div><div class="small muted" style="margin:0 4px 6px">Nombres de ejercicios</div>
+            <${Segmented} options=${{ original: 'Como están', es: 'En español' }} value=${look.names ?? 'original'} onChange=${(names) => setLook({ names })} /></div>
           <div><div class="small muted" style="margin:0 4px 6px">Tamaño de letra</div>
             <${Segmented} options=${TEXT_SIZES} value=${look.text} onChange=${(text) => setLook({ text })} /></div>
           <div><div class="small muted" style="margin:0 4px 6px">Tema</div>
