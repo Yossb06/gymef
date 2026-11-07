@@ -1,8 +1,11 @@
-import { html, useState } from '../../vendor/preact-htm.js';
+import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
 import { Page, Section, Row, Sheet, Field, Input, Segmented, Icon, Tile, run, toast, go } from '../ui.js';
 import { guideFor, videoURL } from '../guides.js';
+import { builtInFrames, customMedia, mediaURL, addExerciseMedia, removeExerciseMedia } from '../media.js';
+import { activeProfileID } from '../session.js';
+import { confirmDialog } from '../ui.js';
 
 const RANGES = { '6-8': '6–8', '8-10': '8–10', '8-12': '8–12', '10-15': '10–15', '12-15': '12–15' };
 /** Series y rango de repeticiones con botones rápidos. */
@@ -172,7 +175,8 @@ export function ExerciseDetail({ owner, id }) {
   const unit = data.unitFor(owner, id);
   return html`
     <${Page} title=${ex.name} backTo="ejercicios" right=${html`<button class="btn plain" onClick=${() => setSheet('edit')}>Editar</button>`}>
-      <div class="card">
+      <${ExerciseVisual} exercise=${ex} editable />
+      <div class="card" style="margin-top:12px">
         <div style="font-size:22px;font-weight:700">${ex.name}</div>
         <div class="muted small">${ex.primaryMuscle} · ${ex.equipment} · ${D.LOAD_TYPES[ex.loadType]}${ex.isUnilateral ? ' · Reps por lado' : ''}</div>
         ${ex.instructionsText && html`<p style="white-space:pre-wrap;margin-bottom:0">${ex.instructionsText}</p>`}
@@ -205,7 +209,8 @@ export function GuideSheet({ exercise, onClose }) {
   const notes = exercise.instructionsText?.trim();
   return html`
     <${Sheet} title="¿Cómo se hace?" onClose=${onClose}>
-      <div class="card stack">
+      <${ExerciseVisual} exercise=${exercise} editable />
+      <div class="card stack" style="margin-top:12px">
         <div class="hstack"><${MuscleTile} muscle=${exercise.primaryMuscle} />
           <div class="spacer"><b>${exercise.name}</b><div class="small muted">${exercise.primaryMuscle} · ${exercise.equipment} · ${D.LOAD_TYPES[exercise.loadType]}</div></div></div>
         ${guide ? html`
@@ -250,4 +255,64 @@ export function LoadTypeReview({ onClose }) {
           })}
         </div>`}
     <//>`;
+}
+
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Imagen del ejercicio: el medio propio de la familia (foto, GIF o video) o, si no hay, las fotos incluidas
+ * alternando inicio ↔ final como animación. `editable` muestra los botones para agregar, cambiar o quitar.
+ */
+export function ExerciseVisual({ exercise, editable = false, compact = false, onClick }) {
+  const custom = customMedia(exercise.id);
+  const frames = builtInFrames(exercise);
+  const [url, setUrl] = useState(null);
+  const [frame, setFrame] = useState(0);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setUrl(null);
+    if (custom) mediaURL(custom).then((u) => alive && setUrl(u)).catch(() => {});
+    return () => { alive = false; };
+  }, [custom?.id]);
+  useEffect(() => {
+    if (custom || !frames || frames.length < 2 || calm()) return undefined;
+    const t = setInterval(() => setFrame((f) => (f + 1) % frames.length), 1000);
+    return () => clearInterval(t);
+  }, [custom?.id, frames?.[0]]);
+
+  async function pick(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    try { await addExerciseMedia(exercise.id, file, activeProfileID()); toast('Guardado para toda la familia'); }
+    catch (error) { toast(error instanceof data.UserError ? error.message : `No se pudo guardar: ${error.message ?? error}`); }
+    setBusy(false);
+  }
+  async function remove() {
+    if (!(await confirmDialog('¿Quitar esta imagen?', { message: frames ? 'Volverá a mostrarse la foto incluida.' : 'El ejercicio quedará sin imagen.', confirm: 'Quitar', danger: true }))) return;
+    try { await removeExerciseMedia(custom.id); } catch (error) { toast(`No se pudo quitar: ${error.message ?? error}`); }
+  }
+
+  const has = custom || frames;
+  if (!has && !editable) return null;
+  const media = custom
+    ? (url ? (custom.kind === 'video'
+        ? html`<video src=${url} autoplay muted loop playsinline aria-label=${`Video de ${exercise.name}`}></video>`
+        : html`<img src=${url} alt=${`Cómo se hace ${exercise.name}`} />`)
+      : html`<span class="visual-loading">Cargando…</span>`)
+    : frames ? frames.map((src, i) => html`<img src=${src} alt=${i === 0 ? `Cómo se hace ${exercise.name}` : ''} class=${i === frame ? 'on' : ''} loading="lazy" />`)
+    : html`<span class="visual-empty">📷<br />Sin imagen</span>`;
+  if (compact) return has ? html`<button class="visual compact" onClick=${onClick} aria-label=${`Ver cómo se hace ${exercise.name}`}>${media}</button>` : null;
+  return html`
+    <div class="visual-wrap">
+      <div class=${`visual ${frames && !custom ? 'frames' : ''}`} onClick=${() => frames && !custom && calm() && setFrame((f) => (f + 1) % frames.length)}>${media}</div>
+      ${editable && html`<div class="hstack visual-actions">
+        <label class=${`btn ${busy ? 'disabled' : ''}`}>${busy ? 'Guardando…' : custom ? 'Cambiar imagen' : html`<${Icon} name="camera" /> Agregar foto, GIF o video`}
+          <input type="file" accept="image/*,video/*" class="visually-hidden" disabled=${busy} onChange=${pick} /></label>
+        ${custom && html`<button class="btn plain danger" onClick=${remove}>Quitar</button>`}
+      </div>
+      <p class="muted small" style="margin:6px 0 0">${custom ? 'Agregada por tu familia: la ven todos los perfiles.' : frames ? 'Foto de referencia. Puedes cambiarla por tu propio GIF o video; la verán todos los perfiles.' : 'Agrega una foto, GIF o video para que toda la familia lo identifique.'}</p>`}
+    </div>`;
 }

@@ -2,6 +2,7 @@ import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
 import { store } from '../store.js';
+import { compressImage } from '../media.js';
 import { Page, Section, Row, Sheet, Field, Input, Segmented, LineChart, run, toast, confirmDialog } from '../ui.js';
 
 const toLocalDate = (t) => { const d = new Date(t); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
@@ -10,16 +11,6 @@ let weightUnit = 'kg';
 const unitOf = (metric) => (metric === 'bodyWeight' ? weightUnit : 'cm');
 const shown = (metric, v) => (metric === 'bodyWeight' ? D.convert(v, 'kg', weightUnit) : v);
 const stored = (metric, v) => (metric === 'bodyWeight' ? D.convert(v, weightUnit, 'kg') : v);
-
-/** Reduce la foto a 1600 px y JPEG para ahorrar espacio. */
-async function compress(file) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
-}
 
 export function BodyView({ owner }) {
   const [tab, setTab] = useState('measures');
@@ -94,7 +85,7 @@ function Photos({ owner }) {
     e.target.value = '';
     if (!file) return;
     setBusy(true);
-    try { await data.addPhoto(owner, await compress(file), file.lastModified || Date.now(), category); toast('Foto guardada'); }
+    try { await data.addPhoto(owner, await compressImage(file), file.lastModified || Date.now(), category); toast('Foto guardada'); }
     catch (error) { toast(`No se pudo guardar la foto: ${error.message}`); }
     setBusy(false);
   }

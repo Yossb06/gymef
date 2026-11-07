@@ -3,7 +3,7 @@
 // los cambios de otros dispositivos se descargan por updated_at. Último cambio gana por registro.
 
 export const KINDS = ['profiles', 'exercises', 'preferences', 'routines', 'days', 'routineExercises',
-  'sessions', 'workoutExercises', 'sets', 'measurements', 'photos'];
+  'sessions', 'workoutExercises', 'sets', 'measurements', 'photos', 'exerciseMedia'];
 const TABLE = 'gym_records';
 const BUCKET = 'gym-photos';
 
@@ -212,41 +212,42 @@ class Store {
     if (changed) this.notify();
   }
 
-  // ---------- Fotos ----------
-  async saveBlob(id, blob) {
+  // ---------- Archivos (fotos de progreso y medios de ejercicios) ----------
+  // En la nube viven en el bucket privado de la cuenta; en este dispositivo se guarda una copia en IndexedDB
+  // la primera vez que se ven, para mostrarlos sin conexión. `name` es la ruta dentro de la carpeta de la cuenta.
+  async saveBlob(id, blob, { name = `${id}.jpg`, contentType = 'image/jpeg' } = {}) {
     if (this.mode === 'cloud') {
-      const { error } = await this.client.storage.from(BUCKET).upload(`${this.user.id}/${id}.jpg`, blob, { contentType: 'image/jpeg', upsert: true });
+      const { error } = await this.client.storage.from(BUCKET).upload(`${this.user.id}/${name}`, blob, { contentType, upsert: true });
       if (error) throw error;
-    } else {
+    }
+    const tx = this.db.transaction('blobs', 'readwrite');
+    tx.objectStore('blobs').put(blob, id);
+    await done(tx);
+  }
+  async blobURL(id, { name = `${id}.jpg` } = {}) {
+    if (this.urlCache.has(id)) return this.urlCache.get(id);
+    let blob = await request(this.db.transaction('blobs').objectStore('blobs').get(id));
+    if (!blob && this.mode === 'cloud') {
+      const { data, error } = await this.client.storage.from(BUCKET).download(`${this.user.id}/${name}`);
+      if (error) throw error;
+      blob = data;
       const tx = this.db.transaction('blobs', 'readwrite');
       tx.objectStore('blobs').put(blob, id);
       await done(tx);
     }
-  }
-  async blobURL(id) {
-    if (this.urlCache.has(id)) return this.urlCache.get(id);
-    let url = null;
-    if (this.mode === 'cloud') {
-      const { data, error } = await this.client.storage.from(BUCKET).createSignedUrl(`${this.user.id}/${id}.jpg`, 3600);
-      if (error) throw error;
-      url = data.signedUrl;
-    } else {
-      const blob = await request(this.db.transaction('blobs').objectStore('blobs').get(id));
-      url = blob ? URL.createObjectURL(blob) : null;
-    }
+    const url = blob ? URL.createObjectURL(blob) : null;
     this.urlCache.set(id, url);
     return url;
   }
-  async deleteBlob(id) {
+  async deleteBlob(id, { name = `${id}.jpg` } = {}) {
     this.urlCache.delete(id);
     if (this.mode === 'cloud') {
-      const { error } = await this.client.storage.from(BUCKET).remove([`${this.user.id}/${id}.jpg`]);
+      const { error } = await this.client.storage.from(BUCKET).remove([`${this.user.id}/${name}`]);
       if (error) throw error;
-    } else {
-      const tx = this.db.transaction('blobs', 'readwrite');
-      tx.objectStore('blobs').delete(id);
-      await done(tx);
     }
+    const tx = this.db.transaction('blobs', 'readwrite');
+    tx.objectStore('blobs').delete(id);
+    await done(tx);
   }
 }
 

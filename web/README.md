@@ -35,11 +35,19 @@ sin Xcode ni reinstalaciones semanales. Toda la familia entra con una sola cuent
 
 Cada persona inicia sesión con la cuenta de la familia y elige su perfil (Fran, Eve, Ayram, Papa Jose…).
 
+## Dónde está publicada
+
+- **GitHub Pages (principal, sin letrero):** https://yossb06.github.io/gymef/web/ — repositorio público `Yossb06/gymef`, con la app dentro de la carpeta `web/`.
+- **Netlify (anterior, se conserva por ahora):** https://gymef.netlify.app — muestra el letrero obligatorio del plan gratis.
+
+Ambas usan el mismo proyecto de Supabase, así que los datos son los mismos en las dos.
+
 ## Publicar cambios
 
 1. `python3 -I Scripts/release-web.py`: fija la versión (fecha + hash) y la lista de archivos que se guardan para usar sin conexión en `sw.js`.
-2. Arrastrar la carpeta `web/` a Netlify → proyecto **gymef** → **Deploys** (recuadro punteado al final de la lista).
-3. Los teléfonos descargan la versión nueva en segundo plano y muestran «Hay una versión nueva · Actualizar». La versión instalada se ve en **Más**.
+2. **GitHub:** en el repositorio, entrar a la carpeta `web` → **Add file → Upload files** → arrastrar el **contenido** de la carpeta `web/` local → **Commit changes**. En 1–2 minutos queda publicada.
+3. *(Mientras se conserve)* **Netlify:** arrastrar la carpeta `web/` a **Deploys** (recuadro punteado al final de la lista).
+4. Los teléfonos descargan la versión nueva en segundo plano y muestran «Hay una versión nueva · Actualizar». La versión instalada se ve en **Más**.
 
 ## Pruebas
 

@@ -4,7 +4,7 @@ import * as D from '../domain.js';
 import { store, newId } from '../store.js';
 import { Page, Section, Row, Sheet, Field, Stepper, RestTimer, restTimer, go, replaceRoute, run, confirmDialog, useTick, useWakeLock, toast, Icon, Tile, ProgressRing, Confetti } from '../ui.js';
 import { themeEmoji } from '../theme.js';
-import { ExercisePicker, PreferenceSheet, GuideSheet, LoadTypeReview } from './exercises.js';
+import { ExercisePicker, PreferenceSheet, GuideSheet, LoadTypeReview, ExerciseVisual } from './exercises.js';
 import { WeightTools } from './tools.js';
 
 const LAST_FINISHED = 'gymef.lastFinished';
@@ -262,11 +262,13 @@ function ExerciseScreen({ owner, we }) {
     <${Page} title=${we.name} backTo="entreno" dock=${dock}
       right=${we.originalExerciseID && html`<button class="btn plain" onClick=${() => go(`ejercicio/${we.originalExerciseID}`)}>Ficha</button>`}>
       <div class="card stack exercise-head">
-        <div>
+        <div class="hstack" style="align-items:flex-start"><div class="spacer">
           <div style="font-size:22px;font-weight:800;letter-spacing:-0.01em">${we.name}</div>
           <div class="muted"><b>${we.targetSets} × ${we.repsMin}–${we.repsMax}</b>${we.restSeconds ? ` · descanso ${D.display(we.restSeconds / 60)} min` : ''}</div>
           ${data.exercise(we.originalExerciseID) && html`<button class="link-btn" onClick=${() => setSheet('guide')}>¿No sabes cómo hacerlo? <b>Ver cómo se hace</b></button>`}
           ${we.isReplaced && html`<div class="small muted">Sustituido · series conservadas</div>`}
+          </div>
+          ${data.exercise(we.originalExerciseID) && html`<${ExerciseVisual} exercise=${data.exercise(we.originalExerciseID)} compact onClick=${() => setSheet('guide')} />`}
         </div>
         ${!we.isReplaced && html`<${PreviousBox} last=${previous} unit=${unit} onUse=${canRecord && needsSet ? usePrevious : null} />`}
         ${!we.isReplaced && !['noHistory', 'historyOnly'].includes(progression.kind) && html`<${ProgressionCard} p=${progression} />`}

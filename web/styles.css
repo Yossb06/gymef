@@ -405,3 +405,16 @@ html.host-badge .update-banner { bottom: calc(100px + var(--badge-lane) + env(sa
 .mini-icon.pink { background: rgba(255, 55, 95, 0.15); color: #ff375f; }
 .small-avatar { width: 30px; height: 30px; font-size: 13px; background: var(--hero); }
 .week-line { margin-top: 10px; font-size: 14px; color: var(--muted); text-align: center; }
+
+/* Imagen del ejercicio */
+.visual { position: relative; aspect-ratio: 3 / 2; border-radius: 16px; overflow: hidden; background: #fff; display: grid; place-items: center; }
+.visual img, .visual video { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
+.visual.frames img { position: absolute; inset: 0; opacity: 0; transition: opacity 0.35s ease; }
+.visual.frames img.on { opacity: 1; }
+.visual.compact { flex: none; width: 92px; aspect-ratio: 3 / 2; padding: 0; border: 0; cursor: pointer; border-radius: 12px; }
+.visual.compact img { position: absolute; inset: 0; opacity: 0; transition: opacity 0.35s ease; object-fit: cover; }
+.visual.compact img.on, .visual.compact img:only-child { opacity: 1; }
+.visual.compact video { object-fit: cover; }
+.visual-empty, .visual-loading { color: #8e8e93; font-size: 14px; text-align: center; }
+.visual-actions { margin-top: 10px; flex-wrap: wrap; }
+.visual-actions .btn { min-height: 40px; }
