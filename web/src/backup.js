@@ -5,7 +5,10 @@ import { isUnit, zeroLoad } from './domain.js';
 const SECTIONS = {
   profiles: ['createdAt'], exercises: ['createdAt'], preferences: [], routines: ['createdAt', 'archivedAt'], days: [],
   routineExercises: [], sessions: ['startedAt', 'endedAt', 'createdAt'], workoutExercises: [], sets: ['confirmedAt'], measurements: ['recordedAt'],
+  memberships: ['paidAt', 'createdAt'],
 };
+// Secciones que la app iOS no tiene: pueden faltar en el archivo (allá se ignoran).
+const OPTIONAL = new Set(['memberships']);
 const MAX_BYTES = 32 * 1024 * 1024;
 
 export function parseBackup(text) {
@@ -15,9 +18,10 @@ export function parseBackup(text) {
   if (raw?.format !== 'GymEF' || raw?.schemaVersion !== 1) throw new Error('Este archivo no es un respaldo compatible con GymE&F V1.');
   const b = {};
   for (const [kind, dates] of Object.entries(SECTIONS)) {
+    if (raw[kind] == null && OPTIONAL.has(kind)) { b[kind] = []; continue; }
     if (!Array.isArray(raw[kind])) throw invalid();
     b[kind] = raw[kind].map((item) => {
-      const out = { ...item };
+      const out = fromPortable(item);
       for (const field of dates) out[field] = item[field] == null ? null : item[field] * 1000;
       return out;
     });
@@ -26,6 +30,14 @@ export function parseBackup(text) {
   return b;
 }
 const invalid = () => new Error('El respaldo contiene datos inválidos, UUID duplicados o relaciones incompletas. No se ha restaurado.');
+// La app iOS no conoce el cardio: en el respaldo viaja como «sin carga externa» con la marca `cardio`, para que
+// el archivo siga abriéndose allá; al restaurarlo aquí vuelve a ser cardio.
+const toPortable = (item) => (item.loadType === 'cardio' ? { ...item, loadType: 'noExternalLoad', cardio: true } : item);
+function fromPortable(item) {
+  if (!item.cardio) return { ...item };
+  const { cardio, ...rest } = item;
+  return { ...rest, loadType: 'cardio' };
+}
 
 function validate(b) {
   const check = (ok) => { if (!ok) throw invalid(); };
@@ -63,6 +75,7 @@ function validate(b) {
     check((!zeroLoad(s.loadType) || s.weight === 0) && s.repsConvention === (s.isUnilateral ? 'perSide' : 'total'));
   }
   for (const m of b.measurements) check(profiles.has(m.profileID) && date(m.recordedAt));
+  for (const m of b.memberships) check(profiles.has(m.profileID) && date(m.paidAt) && Number.isInteger(m.months) && m.months > 0 && (m.price == null || m.price >= 0));
 }
 
 /** Sustituye todos los datos de la cuenta por los del respaldo (las fotos no viajan en el respaldo). */
@@ -86,7 +99,7 @@ export function exportBackup() {
   for (const [kind, dates] of Object.entries(SECTIONS)) {
     out[kind] = store.all(kind).sort((a, b) => (a.id < b.id ? -1 : 1)).map(({ _u, ...item }) => {
       const copy = {};
-      for (const [k, v] of Object.entries(item)) if (v != null) copy[k] = dates.includes(k) ? v / 1000 : v;
+      for (const [k, v] of Object.entries(toPortable(item))) if (v != null) copy[k] = dates.includes(k) ? v / 1000 : v;
       return copy;
     });
   }

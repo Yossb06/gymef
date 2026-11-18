@@ -7,6 +7,7 @@ import { selectProfile } from '../session.js';
 import { Page, Section, Row, Sheet, Stat, Tile, Icon, Confetti, ProgressRing, Segmented, go, run, toast, useTick } from '../ui.js';
 import { activeTheme } from '../theme.js';
 import { LoadTypeReview } from './exercises.js';
+import { workoutPosition } from './workout.js';
 
 const JS_DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -29,6 +30,7 @@ export function Home({ owner }) {
   const [choosing, setChoosing] = useState(false);
   const [sheet, setSheet] = useState(null);
   const missingLoads = data.exercisesWithoutLoad().length;
+  const membership = data.membershipStatus(owner);
   const active = data.activeSession(owner);
   const routine = data.activeRoutine(owner);
   const routineDays = routine ? data.days(routine.id) : [];
@@ -51,11 +53,15 @@ export function Home({ owner }) {
 
   let workout;
   if (active) {
-    const ex = data.sessionExercises(active.id).filter((e) => !e.isReplaced);
+    const all = data.sessionExercises(active.id);
+    const ex = all.filter((e) => !e.isReplaced);
+    const { now, next } = workoutPosition(all);
+    const current = now ?? next;
     workout = html`
       <div class="caps">Entrenamiento en curso</div>
       <div class="big">${active.dayNameSnapshot}</div>
-      <div class="muted small">${ex.length} ejercicios · ${ex.reduce((a, e) => a + e.targetSets, 0)} series objetivo · ${D.formatDuration(Date.now() - active.startedAt)}</div>
+      <div class="muted small">${ex.filter(data.isComplete).length} de ${ex.length} ejercicios · ${D.formatDuration(Date.now() - active.startedAt)}</div>
+      ${current && html`<div class="small" style="margin-top:6px">${now ? 'Vas en' : 'Sigue'}: <b>${N(current.name)}</b>${now ? ` · serie ${data.setsOf(now.id).length + 1} de ${now.targetSets}` : ''}</div>`}
       <button class="btn primary block big" style="margin-top:12px" onClick=${() => go('entreno')}><${Icon} name="play" /> Continuar entrenamiento</button>`;
   } else if (routine) {
     workout = html`
@@ -86,6 +92,9 @@ export function Home({ owner }) {
       ${todays.length > 0 && html`<${BirthdayCard} owner=${owner} people=${todays} />`}
       ${soon.length > 0 && html`<div class="card small birthday-soon">🎈 ${soon.map(({ profile, inDays }) =>
         `${inDays === 1 ? 'Mañana' : `En ${inDays} días`} es el cumpleaños de ${profile.id === owner ? 'ti' : profile.name}`).join(' · ')}</div>`}
+      ${membership && membership.daysLeft <= 5 && membership.daysLeft >= -7 && html`<a class="notice" href="#/mas" style="margin-bottom:12px">
+        <span class="notice-icon">🎫</span><span class="spacer"><b>${membership.daysLeft < 0 ? 'Tu membresía ya venció' : membership.daysLeft === 0 ? 'Tu membresía vence hoy' : `Tu membresía vence en ${membership.daysLeft} ${membership.daysLeft === 1 ? 'día' : 'días'}`}</b>
+        <span class="small muted">Cuando renueves, anótalo en Más → Membresía del gimnasio</span></span><span class="chev">›</span></a>`}
       <div class="hero home-hero">
         <span class="hero-deco" aria-hidden="true">${activeTheme().deco ?? ''}${activeTheme().emoji}</span>
         ${workout}

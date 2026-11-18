@@ -2,7 +2,7 @@
 // ExercisePreferenceStore y BodyMeasurementStore). Toda operación personal exige un perfil explícito.
 import { store, newId } from './store.js';
 import * as D from './domain.js';
-import { altEntry, variationNames, spanishName } from './catalog.js';
+import { altEntry, variationNames, spanishName, ALT_LIBRARY } from './catalog.js';
 
 export class UserError extends Error {}
 const fail = (message) => { throw new UserError(message); };
@@ -188,9 +188,9 @@ export function addEntry(dayID, owner, exerciseID, { sets = 3, repsMin = 8, reps
   const order = Math.max(-1, ...dayEntries(dayID).map((e) => e.order)) + 1;
   return store.put('routineExercises', { id: newId(), order, sets, repsMin, repsMax, restSeconds: null, note: '', dayID, exerciseID });
 }
-/** Añade varios ejercicios de una vez al final del día, con la misma prescripción. */
+/** Añade varios ejercicios de una vez al final del día, con la misma prescripción (el cardio, con sus minutos). */
 export function addEntries(dayID, owner, exerciseIDs, prescription) {
-  return store.batch(() => exerciseIDs.map((id) => addEntry(dayID, owner, id, prescription)));
+  return store.batch(() => exerciseIDs.map((id) => addEntry(dayID, owner, id, D.isCardio(exercise(id)?.loadType) ? CARDIO_RX : prescription)));
 }
 /** Ejercicio de la biblioteca con ese nombre; si no existe, lo crea con los datos de la biblioteca inicial o del catálogo de variaciones. */
 export function exerciseNamed(name) {
@@ -200,6 +200,23 @@ export function exerciseNamed(name) {
   const alt = altEntry(name);
   const [, primaryMuscle, equipment, loadType, isUnilateral] = seed ?? alt ?? [];
   return saveExercise({ name, primaryMuscle, equipment, loadType, isUnilateral: !!isUnilateral });
+}
+let extras = null;
+/**
+ * Ejercicios del catálogo (biblioteca inicial y variaciones) que aún no están en la biblioteca, para que el buscador
+ * los muestre todos. Se agregan a la biblioteca al elegirlos (exerciseNamed).
+ */
+export function catalogExtras() {
+  if (extras?.revision === store.revision) return extras.value;
+  const seen = new Set();
+  const value = [...D.SEED_LIBRARY, ...ALT_LIBRARY].filter(([name]) => {
+    const key = D.normalizedName(spanishName(name) ?? name);
+    if (seen.has(key) || findExercise(name)) return false;
+    seen.add(key);
+    return true;
+  }).map(([name, primaryMuscle, equipment, loadType, isUnilateral]) => ({ name, primaryMuscle, equipment, loadType, isUnilateral: !!isUnilateral, catalog: true }));
+  extras = { revision: store.revision, value };
+  return value;
 }
 // También reconoce el ejercicio por su nombre en español (p. ej. «Sentadilla goblet» → «Goblet saquat»), para no duplicarlo.
 export function findExercise(name) {
@@ -282,13 +299,77 @@ export function deleteEntry(entryID, owner) {
   store.batch(() => {
     store.remove('routineExercises', entryID);
     dayEntries(entry.dayID).forEach((e, i) => e.order !== i && store.update('routineExercises', e.id, { order: i }));
+    normalizeGroups('routineExercises', dayEntries(entry.dayID));
   });
 }
 export function moveEntry(entryID, owner, offset) {
   const entry = requireEntry(entryID, owner);
   const list = dayEntries(entry.dayID);
   reorder('routineExercises', list, list.findIndex((e) => e.id === entryID), offset);
+  normalizeGroups('routineExercises', dayEntries(entry.dayID));
 }
+
+// ---------- Biseries y triseries ----------
+// Ejercicios seguidos con el mismo `group` se hacen uno tras otro sin descanso; se descansa al terminar la vuelta.
+export const blockName = (n) => (n === 2 ? 'Biserie' : n === 3 ? 'Triserie' : 'Circuito');
+/** Bloques de una lista ordenada: [[a], [b, c], …]; los ejercicios sueltos van en un bloque de uno. */
+export function blocks(list) {
+  const out = [];
+  for (const item of list) {
+    const last = out[out.length - 1];
+    if (item.group && last && last[0].group === item.group) last.push(item); else out.push([item]);
+  }
+  return out;
+}
+/** Un grupo con un solo ejercicio (o partido al mover) deja de serlo. */
+function normalizeGroups(kind, list) {
+  store.batch(() => {
+    for (const block of blocks(list.filter((x) => !x.isReplaced))) {
+      if (block.length === 1 && block[0].group) store.update(kind, block[0].id, { group: null });
+    }
+  });
+}
+/** Une los elegidos en un bloque: quedan seguidos, en su orden, donde estaba el primero. */
+function groupInList(kind, list, ids) {
+  const chosen = list.filter((x) => ids.includes(x.id) && !x.isReplaced);
+  if (chosen.length < 2) fail('Elige al menos 2 ejercicios.');
+  const first = list.findIndex((x) => x.id === chosen[0].id);
+  const others = list.filter((x) => !chosen.includes(x));
+  const at = list.slice(0, first).filter((x) => !chosen.includes(x)).length;
+  const ordered = [...others.slice(0, at), ...chosen, ...others.slice(at)];
+  const group = newId();
+  store.batch(() => {
+    ordered.forEach((x, i) => {
+      const changes = chosen.includes(x) ? { group } : {};
+      if (x.order !== i) changes.order = i;
+      if (Object.keys(changes).length) store.update(kind, x.id, changes);
+    });
+    normalizeGroups(kind, [...ordered].map((x) => store.get(kind, x.id)));
+  });
+}
+function ungroupInList(kind, list, group) {
+  store.batch(() => { for (const x of list) if (x.group === group) store.update(kind, x.id, { group: null }); });
+}
+/** Biserie/triserie en la rutina (día). */
+export function groupEntries(dayID, owner, entryIDs) { requireDay(dayID, owner); groupInList('routineExercises', dayEntries(dayID), entryIDs); }
+export function ungroupEntries(dayID, owner, group) { requireDay(dayID, owner); ungroupInList('routineExercises', dayEntries(dayID), group); }
+/** Biserie/triserie solo en el entrenamiento en curso. */
+export function groupSessionExercises(sessionID, owner, weIDs) { requireSession(sessionID, owner); groupInList('workoutExercises', sessionExercises(sessionID), weIDs); }
+export function ungroupSessionExercises(sessionID, owner, group) { requireSession(sessionID, owner); ungroupInList('workoutExercises', sessionExercises(sessionID), group); }
+
+/** Bloque (biserie/triserie) del ejercicio en el entrenamiento, o null si va suelto. */
+export function blockOf(exercises, we) {
+  if (!we.group || we.isReplaced) return null;
+  const block = blocks(exercises.filter((e) => !e.isReplaced)).find((b) => b.some((e) => e.id === we.id));
+  return block && block.length > 1 ? block : null;
+}
+/** Después de una serie de `we`: el siguiente del bloque que aún no hace esta vuelta (sin descanso), o null. */
+export function nextInRound(block, we, done = setsOf(we.id).length) {
+  const i = block.findIndex((e) => e.id === we.id);
+  return block.slice(i + 1).find((e) => !isComplete(e) && setsOf(e.id).length < done) ?? null;
+}
+/** Primer ejercicio del bloque con series pendientes: por donde empieza la siguiente vuelta. */
+export const roundStart = (block) => block.find((e) => !isComplete(e)) ?? null;
 
 // ---------- Entrenamientos ----------
 export const sessions = (owner) => [...store.by('sessions', 'profileID', owner)].sort((a, b) => b.startedAt - a.startedAt);
@@ -315,7 +396,7 @@ export function stateLabel(we) {
 const snapshotOf = (ex, sessionID, entry) => ({
   id: newId(), sessionID, originalExerciseID: ex.id, name: ex.name, order: entry.order, targetSets: entry.sets,
   repsMin: entry.repsMin, repsMax: entry.repsMax, restSeconds: entry.restSeconds ?? null, note: entry.note ?? '',
-  loadType: ex.loadType, isUnilateral: ex.isUnilateral, equipment: ex.equipment, isReplaced: false,
+  loadType: ex.loadType, isUnilateral: ex.isUnilateral, equipment: ex.equipment, isReplaced: false, group: entry.group ?? null,
 });
 export function startWorkout(dayID, owner) {
   const day = requireDay(dayID, owner);
@@ -337,23 +418,34 @@ function validateValues(weight, reps, load) {
   if (!(Number.isFinite(weight) && weight >= 0 && reps > 0 && Number.isInteger(reps)) || (D.zeroLoad(load) && weight !== 0))
     fail('Introduce un peso válido (≥ 0) y repeticiones mayores que cero.');
 }
-const recordFrom = (we, order, weight, reps, unit, id = newId()) => ({
+/** Cardio: minutos obligatorios y distancia opcional. Devuelve los campos a guardar (peso 0, 1 repetición). */
+function cardioFields(cardio) {
+  const { durationSeconds, distanceKm = null } = cardio ?? {};
+  if (!(Number.isFinite(durationSeconds) && durationSeconds > 0 && durationSeconds <= 36000)) fail('Escribe cuántos minutos hiciste.');
+  if (!(distanceKm == null || (Number.isFinite(distanceKm) && distanceKm >= 0 && distanceKm < 1000))) fail('Revisa la distancia.');
+  return { weight: 0, reps: 1, durationSeconds: Math.round(durationSeconds), distanceKm: distanceKm || null };
+}
+/** Minutos sugeridos para un ejercicio de cardio nuevo en la rutina (1 vez de 20–30 min). */
+export const CARDIO_RX = { sets: 1, repsMin: 20, repsMax: 30 };
+const recordFrom = (we, order, weight, reps, unit, id = newId(), cardio = null) => ({
   id, exerciseID: we.id, order, weight, reps, confirmedAt: Date.now(), loadType: we.loadType, isUnilateral: we.isUnilateral,
   equipment: we.equipment, unit, repsConvention: we.isUnilateral ? 'perSide' : 'total',
+  ...(D.isCardio(we.loadType) ? cardioFields(cardio) : {}),
 });
-/** Idempotente por confirmationID: un doble toque no duplica la serie. */
-export function confirmSet(weID, owner, weight, reps, unit, confirmationID) {
+/** Idempotente por confirmationID: un doble toque no duplica la serie. `cardio`: { durationSeconds, distanceKm } en cardio. */
+export function confirmSet(weID, owner, weight, reps, unit, confirmationID, cardio = null) {
   const we = requireWorkoutExercise(weID, owner);
   if (we.isReplaced) fail('El entrenamiento ya no admite nuevas series.');
-  validateValues(weight, reps, we.loadType);
+  if (!D.isCardio(we.loadType)) validateValues(weight, reps, we.loadType);
   const existing = store.get('sets', confirmationID);
   if (existing) return existing;
-  return store.put('sets', recordFrom(we, setsOf(weID).length + 1, weight, reps, unit, confirmationID));
+  return store.put('sets', recordFrom(we, setsOf(weID).length + 1, weight, reps, unit, confirmationID, cardio));
 }
-export function updateSet(setID, owner, weight, reps, unit, { active = true } = {}) {
+export function updateSet(setID, owner, weight, reps, unit, { active = true, cardio = null } = {}) {
   const record = store.get('sets', setID);
   if (!record) fail(OWNERSHIP);
   requireWorkoutExercise(record.exerciseID, owner, { active });
+  if (D.isCardio(record.loadType)) { store.update('sets', setID, cardioFields(cardio)); return; }
   validateValues(weight, reps, record.loadType);
   store.update('sets', setID, { weight, reps, unit: unit ?? record.unit });
 }
@@ -376,6 +468,7 @@ export function restoreSet(record, owner, { active = true } = {}) {
 }
 /** Mejor carga y mejor 1RM estimado con la misma configuración del ejercicio en curso (unidad del ejercicio). */
 export function bestMarks(owner, we) {
+  if (D.isCardio(we.loadType)) return null;
   const unit = unitFor(owner, we.originalExerciseID);
   const target = D.keyId(D.inUnit(D.snapshotKey(we), unit));
   const group = progressIn(owner, unit).groups.find((g) => g.id === target);
@@ -387,6 +480,14 @@ export function bestMarks(owner, we) {
   return { load: D.zeroLoad(we.loadType) || we.loadType === 'assisted' ? null : pick('load'), e1rm: pick('estimated1RM'), reps: pick('reps'), key: group.key };
 }
 
+/** Cuántas series hacer hoy de un ejercicio del entrenamiento en curso (solo esta sesión; la rutina no cambia). */
+export function setTargetSets(weID, owner, sets) {
+  const we = requireWorkoutExercise(weID, owner);
+  if (we.isReplaced) fail('El entrenamiento ya no admite nuevas series.');
+  if (!(Number.isInteger(sets) && sets >= 1 && sets <= 20)) fail('Elige entre 1 y 20 series.');
+  store.update('workoutExercises', weID, { targetSets: sets });
+}
+
 /** Nunca reetiqueta trabajo ya hecho: conserva el snapshot anterior y continúa en uno nuevo. */
 export function replaceInSession(weID, owner, exerciseID, { active = true } = {}) {
   const old = requireWorkoutExercise(weID, owner, { active });
@@ -395,7 +496,8 @@ export function replaceInSession(weID, owner, exerciseID, { active = true } = {}
   if (!ex) fail('El ejercicio ya no está disponible.');
   return store.batch(() => {
     const done = setsOf(weID).length;
-    const next = snapshotOf(ex, old.sessionID, { order: old.order, sets: Math.max(1, old.targetSets - done), repsMin: old.repsMin, repsMax: old.repsMax, restSeconds: old.restSeconds, note: old.note });
+    // El sustituto ocupa el mismo lugar, también dentro de una biserie o triserie.
+    const next = snapshotOf(ex, old.sessionID, { order: old.order, sets: Math.max(1, old.targetSets - done), repsMin: old.repsMin, repsMax: old.repsMax, restSeconds: old.restSeconds, note: old.note, group: old.group });
     if (!done) store.remove('workoutExercises', weID);
     else {
       store.update('workoutExercises', weID, { isReplaced: true });
@@ -421,6 +523,7 @@ export function addExerciseToSession(sessionID, owner, exerciseID, prescription,
     const order = afterOrder == null ? Math.max(-1, ...list.map((e) => e.order)) + 1 : afterOrder + 1;
     for (const e of list) if (e.order >= order) store.update('workoutExercises', e.id, { order: e.order + 1 });
     const we = store.put('workoutExercises', snapshotOf(ex, sessionID, { ...prescription, order, restSeconds: null, note: '' }));
+    normalizeGroups('workoutExercises', sessionExercises(sessionID));
     const day = alsoRoutine ? routineDayOf(session) : null;
     if (day && store.get('routines', day.routineID)?.profileID === owner) addEntry(day.id, owner, ex.id, prescription);
     return we;
@@ -433,6 +536,7 @@ export function removeFromSession(weID, owner) {
   store.batch(() => {
     store.remove('workoutExercises', weID);
     sessionExercises(we.sessionID).forEach((e, i) => e.order !== i && store.update('workoutExercises', e.id, { order: i }));
+    normalizeGroups('workoutExercises', sessionExercises(we.sessionID));
   });
 }
 export function finishWorkout(sessionID, owner, cancelled = false) {
@@ -441,10 +545,10 @@ export function finishWorkout(sessionID, owner, cancelled = false) {
 }
 
 // ---------- Historial (edición explícita) ----------
-export function addSetToHistory(weID, owner, weight, reps, unit) {
+export function addSetToHistory(weID, owner, weight, reps, unit, cardio = null) {
   const we = requireWorkoutExercise(weID, owner, { active: false });
-  validateValues(weight, reps, we.loadType);
-  return store.put('sets', recordFrom(we, setsOf(weID).length + 1, weight, reps, unit));
+  if (!D.isCardio(we.loadType)) validateValues(weight, reps, we.loadType);
+  return store.put('sets', recordFrom(we, setsOf(weID).length + 1, weight, reps, unit, newId(), cardio));
 }
 /** Sin prescripción histórica inventada (targetSets = 0), como en la app iOS. */
 export function addExerciseToHistory(sessionID, owner, exerciseID) {
@@ -544,6 +648,7 @@ export function progressionForKey(owner, key) {
     for (const entry of dayEntries(day.id)) {
       const ex = exercise(entry.exerciseID);
       if (!ex || D.keyId(D.libraryKey(ex)) !== D.keyId(D.inUnit(key, 'kg'))) continue;
+      if (D.isCardio(ex.loadType)) return null;
       const source = previousWorkout(owner, D.inUnit(key, 'kg'), ex.id);
       return [day.name, D.evaluateProgression({ target: entry.sets, min: entry.repsMin, max: entry.repsMax, load: ex.loadType,
         unilateral: ex.isUnilateral, equipment: ex.equipment, source,
@@ -560,6 +665,7 @@ function progressSessions(owner, extra = []) {
     sets: sessionExercises(s.id).flatMap((we) => setsOf(we.id).map((r) => ({
       id: r.id, sessionID: s.id, date: s.startedAt, confirmedAt: r.confirmedAt, key: D.snapshotKey(we, r), name: we.name,
       weight: D.isUnit(r.unit) ? D.convert(r.weight, r.unit, 'kg') : r.weight, reps: r.reps, order: r.order,
+      durationSeconds: r.durationSeconds ?? null, distanceKm: r.distanceKm ?? null,
     }))),
   }));
 }
@@ -600,13 +706,15 @@ export function historyCSV(owner) {
   const cell = (v) => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   const num = (v) => String(Math.round(v * 100) / 100).replace('.', ',');
   const STATUS = { completed: 'Completado', cancelled: 'Cancelado', active: 'En curso' };
-  const rows = [['Fecha', 'Hora', 'Entrenamiento', 'Estado', 'Ejercicio', 'Serie', 'Peso', 'Unidad', 'Reps', 'Tipo de carga', 'Equipo', 'Reps por lado']];
+  const rows = [['Fecha', 'Hora', 'Entrenamiento', 'Estado', 'Ejercicio', 'Serie', 'Peso', 'Unidad', 'Reps', 'Tipo de carga', 'Equipo', 'Reps por lado', 'Minutos', 'Distancia (km)']];
   for (const s of [...sessions(owner)].reverse()) {
     const start = new Date(s.startedAt);
     for (const we of sessionExercises(s.id)) {
       for (const r of setsOf(we.id)) {
+        const cardio = D.isCardio(r.loadType);
         rows.push([start.toLocaleDateString('es'), start.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }), s.dayNameSnapshot,
-          STATUS[s.status], we.name, r.order, num(r.weight), r.unit, r.reps, D.LOAD_TYPES[r.loadType] ?? r.loadType, r.equipment, r.isUnilateral ? 'Sí' : 'No']);
+          STATUS[s.status], we.name, r.order, cardio ? '' : num(r.weight), cardio ? '' : r.unit, cardio ? '' : r.reps, D.LOAD_TYPES[r.loadType] ?? r.loadType,
+          r.equipment, r.isUnilateral ? 'Sí' : 'No', cardio ? num((r.durationSeconds ?? 0) / 60) : '', cardio && r.distanceKm ? num(r.distanceKm) : '']);
       }
     }
   }
@@ -669,6 +777,32 @@ export function bodyWeightTrend(owner) {
   const latest = list[0];
   const ref = list.find((m) => m.recordedAt <= latest.recordedAt - 25 * 864e5) ?? list[list.length - 1];
   return { latest, change: ref !== latest ? latest.bodyWeight - ref.bodyWeight : null, since: ref.recordedAt };
+}
+
+// ---------- Membresía del gimnasio (por perfil) ----------
+export const MEMBERSHIP_MONTHS = { 1: '1 mes', 3: '3 meses', 6: '6 meses', 12: '1 año' };
+export const memberships = (owner) => store.all('memberships').filter((m) => m.profileID === owner)
+  .sort((a, b) => b.paidAt - a.paidAt || b.createdAt - a.createdAt);
+export function saveMembership(owner, { paidAt, months, price, note }) {
+  if (!profile(owner)) fail(OWNERSHIP);
+  if (!Number.isFinite(paidAt)) fail('Elige la fecha en que pagaste.');
+  if (!(Number.isInteger(months) && months >= 1 && months <= 36)) fail('Elige cuánto dura la membresía.');
+  if (!(price == null || (Number.isFinite(price) && price >= 0))) fail('Revisa el precio.');
+  return store.put('memberships', { id: newId(), profileID: owner, paidAt, months, price: price ?? null, note: trimmed(note) || null, createdAt: Date.now() });
+}
+export function deleteMembership(owner, id) {
+  if (store.get('memberships', id)?.profileID !== owner) fail(OWNERSHIP);
+  store.remove('memberships', id);
+}
+/** Fin del periodo pagado: la fecha de pago más los meses. */
+export function membershipEnd(m) { const d = new Date(m.paidAt); d.setMonth(d.getMonth() + m.months); return d.getTime(); }
+/** El último pago, cuándo vence y cuántos días faltan (negativo si ya venció). */
+export function membershipStatus(owner, now = Date.now()) {
+  const last = memberships(owner)[0];
+  if (!last) return null;
+  const endsAt = membershipEnd(last);
+  const day = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  return { membership: last, endsAt, daysLeft: Math.round((day(endsAt) - day(now)) / 864e5) };
 }
 
 // ---------- Meta semanal y notas ----------

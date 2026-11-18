@@ -25,7 +25,54 @@ export const setSpanishNames = (on) => { useSpanish = !!on; };
 /** Nombre para mostrar de un ejercicio según la preferencia del perfil. */
 export const N = (name) => (useSpanish && spanishName(name)) || name;
 
-// Ejercicios que se agregan a la biblioteca cuando alguien elige una alternativa:
+// Nombre → nombre en inglés, y otras palabras con que la gente lo busca (también español de México).
+// Así se encuentra cualquier ejercicio escribiendo en español o en inglés, sin importar cómo se muestren los nombres.
+const ENGLISH = {
+  'Aperturas con mancuernas': 'Dumbbell flyes', 'Cruce de poleas': 'Cable crossover', 'Flexiones': 'Push-ups pushups',
+  'Press de pecho en máquina': 'Machine chest press', 'Press de banca con mancuernas': 'Dumbbell bench press',
+  'Press inclinado con mancuerna': 'Incline dumbbell press', 'Remo con mancuerna a una mano': 'One-arm dumbbell row',
+  'Remo invertido': 'Inverted row', 'Dominadas supinas': 'Chin-up chinup', 'Sentadilla búlgara con mancuernas': 'Bulgarian split squat',
+  'Zancadas con mancuernas': 'Dumbbell lunges', 'Sentadilla con mancuernas': 'Dumbbell squat', 'Sentadilla goblet': 'Goblet squat',
+  'Peso muerto rumano con mancuernas': 'Dumbbell Romanian deadlift', 'Hip thrust con barra': 'Barbell hip thrust',
+  'Puente de glúteo a una pierna': 'Single-leg glute bridge', 'Curl femoral con pelota': 'Ball leg curl',
+  'Extensiones de espalda': 'Back extension hyperextension', 'Elevación de talones sentado': 'Seated calf raise',
+  'Press de hombro con mancuernas': 'Dumbbell shoulder press', 'Elevación lateral con banda': 'Band lateral raise',
+  'Pájaro con mancuernas': 'Rear delt fly reverse fly', 'Extensión de tríceps con mancuerna': 'Dumbbell overhead triceps extension',
+  'Jalón de tríceps en polea': 'Triceps pushdown', 'Fondos en banco': 'Bench dips', 'Curl con barra': 'Barbell curl',
+  'Curl con mancuernas': 'Dumbbell curl', 'Aductores con banda': 'Band hip adduction', 'Crunch abdominal': 'Crunches',
+  'Elevación de piernas en banco': 'Lying leg raise', 'Press banca en Smith': 'Smith machine bench press',
+  'Press inclinado en Smith': 'Smith machine incline press', 'Press inclinado en máquina': 'Machine incline chest press',
+  'Press de pecho en polea': 'Cable chest press', 'Aperturas inclinadas con mancuernas': 'Incline dumbbell flyes',
+  'Aperturas en polea baja': 'Low cable fly', 'Sentadilla frontal': 'Front squat', 'Press militar con barra': 'Barbell overhead press military press',
+  'Press de hombro en Smith': 'Smith machine shoulder press', 'Curl en máquina predicador': 'Machine preacher curl',
+  'Curl martillo en polea': 'Cable hammer curl rope', 'Press francés con barra Z': 'EZ bar skull crusher',
+  'Elevación de talones con mancuernas': 'Dumbbell calf raise', 'Elevación de talones en prensa': 'Leg press calf raise',
+  'Remo T': 'T-bar row', 'Remo con mancuernas inclinado': 'Bent-over dumbbell row', 'Encogimientos con barra': 'Barbell shrug',
+  'Encogimientos en polea': 'Cable shrug', 'Subidas al banco con mancuernas': 'Dumbbell step-up', 'Crunch en máquina': 'Ab crunch machine',
+  'Jalón al pecho': 'Lat pulldown', 'Press banca': 'Bench press', 'Press inclinado': 'Incline bench press', 'Curl predicador': 'Preacher curl',
+  'Prensa': 'Leg press', 'Fondos': 'Dips', 'Curl martillo': 'Hammer curl',
+  'Caminadora': 'Treadmill', 'Bicicleta estática': 'Stationary bike exercise bike', 'Bicicleta reclinada': 'Recumbent bike',
+  'Elíptica': 'Elliptical', 'Escaladora': 'Stair climber stairmaster', 'Máquina de remo': 'Rowing machine rower', 'Saltar la cuerda': 'Jump rope',
+};
+const ALIASES = {
+  'Extensiones de espalda': 'espalda baja lumbar lumbares hiperextensiones banco romano', 'Crunch en máquina': 'abdominal abdominales maquina de abdomen',
+  'Crunch abdominal': 'abdominales abdomen', 'Ab crunch': 'abdominales abdomen', 'Leg raises': 'abdominales abdomen bajo',
+  'Elevación de piernas en banco': 'abdominales abdomen bajo', 'Flexiones': 'lagartijas', 'Pull-up': 'barra fija', 'Squat': 'sentadilla libre',
+  'Prensa': 'prensa de piernas', 'Hip abduction': 'gluteo medio', 'Standing calf raise': 'pantorrillas', 'Elevación de talones sentado': 'pantorrillas',
+  'Elevación de talones con mancuernas': 'pantorrillas', 'Elevación de talones en prensa': 'pantorrillas', 'Shrugs': 'trapecio',
+  'Hip thrust con barra': 'empuje de cadera', 'Remo T': 'remo en t',
+  'Caminadora': 'correr caminar trotar cinta', 'Bicicleta estática': 'bici spinning', 'Bicicleta reclinada': 'bici',
+  'Escaladora': 'escaleras', 'Máquina de remo': 'remo ergometro', 'Saltar la cuerda': 'comba brincar',
+};
+const ENGLISH_BY_KEY = new Map(Object.entries(ENGLISH).map(([k, v]) => [normalizedName(k), v]));
+const ALIASES_BY_KEY = new Map(Object.entries(ALIASES).map(([k, v]) => [normalizedName(k), v]));
+/** Texto extra para encontrar un ejercicio en español o en inglés. */
+export const searchAliases = (name) => {
+  const key = normalizedName(name ?? '');
+  return [spanishName(name), ENGLISH_BY_KEY.get(key), ALIASES_BY_KEY.get(key)].filter(Boolean).join(' ');
+};
+
+// Catálogo: ejercicios que se agregan a la biblioteca al elegirlos (en el buscador o como variación).
 // [nombre, músculo, equipo, tipo de carga, reps por lado]
 export const ALT_LIBRARY = [
   ['Aperturas con mancuernas', 'Pecho', 'Mancuernas', 'dumbbellPerHand', false],
@@ -45,7 +92,7 @@ export const ALT_LIBRARY = [
   ['Hip thrust con barra', 'Glúteos', 'Barra y banco', 'totalWeight', false],
   ['Puente de glúteo a una pierna', 'Glúteos', 'Peso corporal', 'bodyweight', true],
   ['Curl femoral con pelota', 'Isquiotibiales', 'Pelota de estabilidad', 'noExternalLoad', false],
-  ['Extensiones de espalda', 'Isquiotibiales', 'Banco romano', 'bodyweight', false],
+  ['Extensiones de espalda', 'Espalda baja', 'Banco romano', 'bodyweight', false],
   ['Elevación de talones sentado', 'Gemelos', 'Máquina', 'machine', false],
   ['Press de hombro con mancuernas', 'Hombros', 'Mancuernas', 'dumbbellPerHand', false],
   ['Elevación lateral con banda', 'Hombros', 'Banda elástica', 'noExternalLoad', false],
@@ -58,6 +105,7 @@ export const ALT_LIBRARY = [
   ['Curl con mancuernas', 'Bíceps', 'Mancuernas', 'dumbbellPerHand', false],
   ['Aductores con banda', 'Aductores', 'Banda elástica', 'noExternalLoad', true],
   ['Crunch abdominal', 'Abdomen', 'Peso corporal', 'bodyweight', false],
+  ['Crunch en máquina', 'Abdomen', 'Máquina', 'machine', false],
   ['Elevación de piernas en banco', 'Abdomen', 'Banco', 'bodyweight', false],
   ['Press banca en Smith', 'Pecho', 'Máquina Smith', 'machine', false],
   ['Press inclinado en Smith', 'Pecho', 'Máquina Smith', 'machine', false],
@@ -78,6 +126,14 @@ export const ALT_LIBRARY = [
   ['Encogimientos con barra', 'Trapecio', 'Barra', 'totalWeight', false],
   ['Encogimientos en polea', 'Trapecio', 'Polea', 'cable', false],
   ['Subidas al banco con mancuernas', 'Cuádriceps', 'Mancuernas y banco', 'dumbbellPerHand', true],
+  // Cardio: se anotan minutos y, si se quiere, distancia.
+  ['Caminadora', 'Cardio', 'Caminadora', 'cardio', false],
+  ['Bicicleta estática', 'Cardio', 'Bicicleta', 'cardio', false],
+  ['Bicicleta reclinada', 'Cardio', 'Bicicleta reclinada', 'cardio', false],
+  ['Elíptica', 'Cardio', 'Elíptica', 'cardio', false],
+  ['Escaladora', 'Cardio', 'Escaladora', 'cardio', false],
+  ['Máquina de remo', 'Cardio', 'Máquina de remo', 'cardio', false],
+  ['Saltar la cuerda', 'Cardio', 'Cuerda', 'cardio', false],
 ];
 const ALT_BY_KEY = new Map(ALT_LIBRARY.map((row) => [normalizedName(row[0]), row]));
 export const altEntry = (name) => ALT_BY_KEY.get(normalizedName(name)) ?? null;
@@ -119,8 +175,12 @@ const VARIATIONS = {
   'Hip abduction': ['Puente de glúteo a una pierna', 'Hip thrust con barra'],
   'Hip adduction': ['Aductores con banda', 'Zancadas con mancuernas'],
   'Standing calf raise': ['Elevación de talones con mancuernas', 'Elevación de talones en prensa', 'Elevación de talones sentado'],
-  'Ab crunch': ['Crunch abdominal', 'Elevación de piernas en banco'],
+  'Ab crunch': ['Crunch en máquina', 'Crunch abdominal', 'Elevación de piernas en banco'],
+  'Crunch en máquina': ['Crunch abdominal', 'Elevación de piernas en banco'],
   'Leg raises': ['Elevación de piernas en banco', 'Crunch abdominal'],
+  'Caminadora': ['Elíptica', 'Bicicleta estática', 'Escaladora'],
+  'Bicicleta estática': ['Bicicleta reclinada', 'Elíptica'],
+  'Máquina de remo': ['Elíptica', 'Saltar la cuerda'],
 };
 const LINKS = new Map();
 const link = (a, b) => {

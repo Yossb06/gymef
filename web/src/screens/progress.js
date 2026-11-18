@@ -19,7 +19,7 @@ export function ProgressView({ owner }) {
         <${Stat} value=${o.workouts} label="Entrenamientos" /><${Stat} value=${o.sets} label="Series" />
         <${Stat} value=${o.reps} label="Reps" /><${Stat} value=${o.averageDuration ? D.formatDuration(o.averageDuration) : '—'} label="Duración media" />
       </div>
-      <p class="muted small">${D.volumeLabel(o.volume)}</p>
+      <p class="muted small">${D.volumeLabel(o.volume)}${o.cardioMinutes > 0 ? ` · Cardio: ${D.display(o.cardioMinutes)} min` : ''}</p>
       ${intel.events.length > 0 && html`<${Section} title="Destacados">
         <div class="list">${intel.events.map((e) => html`<${Row} icon=${e.icon} title=${`${e.title} · ${N(e.group.name)}`} sub=${e.detail} href=${`progreso/${encodeURIComponent(e.group.id)}`} />`)}</div><//>`}
       <${Section} title="Ejercicios">
@@ -52,7 +52,7 @@ export function ExerciseProgress({ owner, id }) {
   const bySession = new Map();
   for (const s of group.sets) { if (!bySession.has(s.sessionID)) bySession.set(s.sessionID, []); bySession.get(s.sessionID).push(s); }
   const visits = [...bySession.values()].sort((a, b) => b[0].date - a[0].date);
-  const suffix = current === 'reps' ? ' reps' : ` ${D.keyLoadLabel(group.key)}`;
+  const suffix = { reps: ' reps', minutes: ' min', distance: ' km' }[current] ?? ` ${D.keyLoadLabel(group.key)}`;
   return html`
     <${Page} title=${N(group.name)} backTo="progreso"
       right=${exerciseID && data.exercise(exerciseID) && html`<a class="btn plain" href=${`#/ejercicio/${exerciseID}`}>Ficha</a>`}>

@@ -108,7 +108,7 @@ function DialogView({ d, close }) {
 }
 
 // ---------- Componentes ----------
-export const VERSION = '2026-11-06.13a1a80';
+export const VERSION = '2026-11-17.c09a06d';
 
 /** Zona donde se puede soltar un archivo arrastrado desde Finder (alternativa al selector de archivos). */
 export function DropZone({ onFile, children }) {
@@ -305,8 +305,11 @@ function chime() {
     o.start(now + delay); o.stop(now + delay + 0.22);
   });
 }
-/** `presets`: si no hay descanso en marcha, ofrece iniciarlo a mano (ejercicios sin descanso configurado). */
-export function RestTimer({ presets = false }) {
+/**
+ * `presets`: si no hay descanso en marcha, ofrece iniciarlo a mano (ejercicios sin descanso configurado).
+ * `next`: lo que toca después del descanso («serie 3 de 3», el siguiente ejercicio…), para saber siempre qué sigue.
+ */
+export function RestTimer({ presets = false, next = null }) {
   const [, set] = useState({});
   useEffect(() => { host.listeners.add(set); return () => host.listeners.delete(set); }, []);
   useTick(500);
@@ -322,13 +325,18 @@ export function RestTimer({ presets = false }) {
   }
   return html`
     <div class=${`timer ${secs === 0 ? 'done' : ''}`} role="timer">
-      <span aria-hidden="true">${secs === 0 ? '✓' : '⏱'}</span>
-      <span class="time">${secs === 0 ? 'Descanso terminado' : `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`}</span>
-      ${t.paused != null && html`<span class="small muted">Pausado</span>`}
-      <span class="spacer"></span>
-      ${secs > 0 && html`<button class="btn" onClick=${() => restTimer.add(30)} aria-label="Añadir treinta segundos">+30 s</button>
-      <button class="btn" onClick=${() => (t.paused != null ? restTimer.resume() : restTimer.pause())}>${t.paused != null ? 'Reanudar' : 'Pausar'}</button>`}
-      <button class="btn" onClick=${() => restTimer.skip()}>${secs === 0 ? 'Cerrar' : 'Omitir'}</button>
+      <div class="timer-row">
+        <span aria-hidden="true">${secs === 0 ? '✓' : '⏱'}</span>
+        <span class="timer-text">
+          <span class="timer-kicker">${secs === 0 ? '¡A darle!' : t.paused != null ? 'Descanso en pausa' : 'Descansando'}</span>
+          <span class="time">${secs === 0 ? 'Descanso terminado' : `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`}</span>
+        </span>
+        <span class="spacer"></span>
+        ${secs > 0 && html`<button class="btn" onClick=${() => restTimer.add(30)} aria-label="Añadir treinta segundos">+30 s</button>
+        <button class="btn" onClick=${() => (t.paused != null ? restTimer.resume() : restTimer.pause())}>${t.paused != null ? 'Reanudar' : 'Pausar'}</button>`}
+        <button class="btn" onClick=${() => restTimer.skip()}>${secs === 0 ? 'Cerrar' : 'Omitir'}</button>
+      </div>
+      ${next && html`<div class="timer-next">${secs === 0 ? 'Ahora' : 'Luego'}: <b>${next}</b></div>`}
     </div>`;
 }
 

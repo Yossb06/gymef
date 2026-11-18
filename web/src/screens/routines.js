@@ -3,7 +3,7 @@ import * as data from '../data.js';
 import * as D from '../domain.js';
 import { N } from '../catalog.js';
 import { Page, Section, Row, Sheet, Field, Input, Icon, run, go, toast, confirmDialog, promptDialog } from '../ui.js';
-import { ExercisePicker, GuideSheet, MuscleTile } from './exercises.js';
+import { ExercisePicker, GuideSheet, MuscleTile, GroupSheet } from './exercises.js';
 import { startWorkout } from './home.js';
 
 const exerciseCount = (routineID) => data.days(routineID).reduce((a, d) => a + data.dayEntries(d.id).length, 0);
@@ -133,6 +133,20 @@ export function DayDetail({ owner, id }) {
       run(() => data.deleteDay(id, owner)); go(`rutina/${routine.id}`);
     }
   };
+  const entryRow = (e, i) => {
+    const ex = data.exercise(e.exerciseID);
+    return html`<div class="row static">
+      ${ex && html`<${MuscleTile} muscle=${ex.primaryMuscle} />`}
+      <button class="grow" style="background:none;border:0;text-align:left;padding:0;cursor:pointer;color:inherit" onClick=${() => setSheet({ entry: e })}>
+        <div class="title">${N(ex?.name) ?? 'Ejercicio no disponible'}</div>
+        <div class="sub">${D.isCardio(ex?.loadType) ? `${e.sets > 1 ? `${e.sets} × ` : ''}${e.repsMin}–${e.repsMax} min de cardio` : `${e.sets} × ${e.repsMin}–${e.repsMax}`}${e.restSeconds ? ` · ${D.display(e.restSeconds / 60)} min` : ''}${e.note ? ` · ${e.note}` : ''}</div>
+        ${previousLine(owner, e.exerciseID)}
+      </button>
+      ${ex && html`<button class="help-btn" aria-label=${`Cómo se hace ${N(ex.name)}`} onClick=${() => setSheet({ guide: ex, entryID: e.id })}>?</button>`}
+      <button class="icon-btn" aria-label="Subir" disabled=${i === 0} onClick=${() => run(() => data.moveEntry(e.id, owner, -1))}>↑</button>
+      <button class="icon-btn" aria-label="Bajar" disabled=${i === entries.length - 1} onClick=${() => run(() => data.moveEntry(e.id, owner, 1))}>↓</button>
+    </div>`;
+  };
   return html`
     <${Page} title=${day.name} backTo=${`rutina/${routine.id}`} right=${html`<button class="btn plain" onClick=${() => setSheet('day')}>Editar</button>`}>
       <div class="card">
@@ -142,24 +156,17 @@ export function DayDetail({ owner, id }) {
       <${Section} title="Ejercicios">
         <div class="list">
           ${entries.length === 0 && html`<div class="row static muted">Día de descanso. Añade ejercicios para entrenarlo.</div>`}
-          ${entries.map((e, i) => {
-            const ex = data.exercise(e.exerciseID);
-            return html`<div class="row static">
-              ${ex && html`<${MuscleTile} muscle=${ex.primaryMuscle} />`}
-              <button class="grow" style="background:none;border:0;text-align:left;padding:0;cursor:pointer;color:inherit" onClick=${() => setSheet({ entry: e })}>
-                <div class="title">${N(ex?.name) ?? 'Ejercicio no disponible'}</div>
-                <div class="sub">${e.sets} × ${e.repsMin}–${e.repsMax}${e.restSeconds ? ` · ${D.display(e.restSeconds / 60)} min` : ''}${e.note ? ` · ${e.note}` : ''}</div>
-                ${previousLine(owner, e.exerciseID)}
-              </button>
-              ${ex && html`<button class="help-btn" aria-label=${`Cómo se hace ${N(ex.name)}`} onClick=${() => setSheet({ guide: ex, entryID: e.id })}>?</button>`}
-              <button class="icon-btn" aria-label="Subir" disabled=${i === 0} onClick=${() => run(() => data.moveEntry(e.id, owner, -1))}>↑</button>
-              <button class="icon-btn" aria-label="Bajar" disabled=${i === entries.length - 1} onClick=${() => run(() => data.moveEntry(e.id, owner, 1))}>↓</button>
-            </div>`;
-          })}
+          ${data.blocks(entries).map((block) => (block.length > 1 ? html`
+            <div class="block">
+              <div class="block-head"><span class="spacer"><b>${data.blockName(block.length)}</b> · sin descanso entre ellos</span>
+                <button class="btn plain" onClick=${() => run(() => data.ungroupEntries(id, owner, block[0].group))}>Separar</button></div>
+              ${block.map((e) => entryRow(e, entries.indexOf(e)))}
+            </div>` : entryRow(block[0], entries.indexOf(block[0]))))}
         </div>
       <//>
       <div class="stack" style="margin-top:16px">
         <button class="btn primary block" onClick=${() => setSheet('add')}><${Icon} name="plus" /> Añadir ejercicios</button>
+        ${entries.length > 1 && html`<button class="btn block" onClick=${() => setSheet('group')}>⛓ Hacer biserie o triserie</button>`}
         <button class="btn block" onClick=${() => { const c = run(() => data.duplicateDay(id, owner)); if (c) go(`dia/${c.id}`); }}>Duplicar día</button>
         <button class="btn block danger" onClick=${remove}>Eliminar día</button>
       </div>
@@ -167,6 +174,8 @@ export function DayDetail({ owner, id }) {
     ${sheet === 'day' && html`<${DayForm} day=${day} onClose=${() => setSheet(null)} onSave=${(name, weekday) => { run(() => data.updateDay(id, owner, name, weekday)); setSheet(null); }} />`}
     ${sheet === 'add' && html`<${ExercisePicker} title="Añadir ejercicios" multiple onClose=${() => setSheet(null)}
       onPickMany=${(ids, rx) => { const added = run(() => data.addEntries(id, owner, ids, rx)); if (added) { setSheet(null); toast(`${added.length} ${added.length === 1 ? 'ejercicio añadido' : 'ejercicios añadidos'}`); } }} />`}
+    ${sheet === 'group' && html`<${GroupSheet} items=${entries} nameOf=${(e) => N(data.exercise(e.exerciseID)?.name) ?? 'Ejercicio'} onClose=${() => setSheet(null)}
+      onGroup=${(ids) => { if (run(() => { data.groupEntries(id, owner, ids); return true; })) { setSheet(null); toast(`${data.blockName(ids.length)} lista: se harán seguidos, sin descanso entre ellos`); } }} />`}
     ${sheet?.entry && html`<${EntryEditor} owner=${owner} entry=${sheet.entry} onClose=${() => setSheet(null)} onReplace=${() => setSheet({ replacing: sheet.entry })} />`}
     ${sheet?.guide && html`<${GuideSheet} exercise=${sheet.guide} onClose=${() => setSheet(null)} useLabel="Cambiar en mi rutina"
       onUse=${(alt) => { if (alt && run(() => { data.replaceEntry(sheet.entryID, owner, alt.id); return true; })) { toast(`Cambiado por ${N(alt.name)} en tu rutina`); setSheet(null); } }} />`}
@@ -190,13 +199,14 @@ function EntryEditor({ owner, entry, onClose, onReplace }) {
     if (await confirmDialog('¿Quitar este ejercicio del día?', { confirm: 'Quitar', danger: true })) { run(() => data.deleteEntry(entry.id, owner)); onClose(); }
   };
   const num = (setter) => (v) => setter(v.replace(/\D/g, ''));
+  const cardio = D.isCardio(ex?.loadType);
   return html`
     <${Sheet} title=${N(ex?.name) ?? 'Ejercicio'} onClose=${onClose} right=${html`<button class="btn plain" onClick=${save}>Guardar</button>`}>
       <div class="card">
         <div class="grid2" style="grid-template-columns:1fr 1fr 1fr">
-          <${Field} label="Series"><${Input} inputmode="numeric" value=${sets} onInput=${num(setSets)} /><//>
-          <${Field} label="Reps mín."><${Input} inputmode="numeric" value=${min} onInput=${num(setMin)} /><//>
-          <${Field} label="Reps máx."><${Input} inputmode="numeric" value=${max} onInput=${num(setMax)} /><//>
+          <${Field} label=${cardio ? 'Veces' : 'Series'}><${Input} inputmode="numeric" value=${sets} onInput=${num(setSets)} /><//>
+          <${Field} label=${cardio ? 'Min. mínimos' : 'Reps mín.'}><${Input} inputmode="numeric" value=${min} onInput=${num(setMin)} /><//>
+          <${Field} label=${cardio ? 'Min. máximos' : 'Reps máx.'}><${Input} inputmode="numeric" value=${max} onInput=${num(setMax)} /><//>
         </div>
         <${Field} label="Descanso (opcional)">
           <div class="grid2"><${Input} inputmode="numeric" placeholder="min" value=${restMin} onInput=${num(setRestMin)} /><${Input} inputmode="numeric" placeholder="seg" value=${restSec} onInput=${num(setRestSec)} /></div><//>
@@ -213,6 +223,8 @@ function EntryEditor({ owner, entry, onClose, onReplace }) {
 
 /** Línea breve «Anterior: 80 lb · 9 / 10 / 8 reps» bajo cada ejercicio del día. */
 function previousLine(owner, exerciseID) {
-  const text = data.lastPerformanceText(data.lastPerformance(owner, exerciseID), data.unitFor(owner, exerciseID));
+  const last = data.lastPerformance(owner, exerciseID);
+  if (last && D.isCardio(last.loadType)) return html`<div class="sub prev-line">Anterior: ${last.sets.map(D.recordLabel).join(' / ')}</div>`;
+  const text = data.lastPerformanceText(last, data.unitFor(owner, exerciseID));
   return text && html`<div class="sub prev-line">Anterior: ${text.weight ? `${text.weight} · ` : ''}${text.reps} reps</div>`;
 }

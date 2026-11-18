@@ -1,7 +1,7 @@
 import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import * as data from '../data.js';
 import * as D from '../domain.js';
-import { N, spanishName } from '../catalog.js';
+import { N, searchAliases } from '../catalog.js';
 import { Page, Section, Row, Sheet, Field, Input, Segmented, Icon, Tile, run, toast, go } from '../ui.js';
 import { guideFor, videoURL, bodyInfo, SAFETY_GENERAL } from '../guides.js';
 import { builtInFrames, customMedia, mediaURL, addExerciseMedia, removeExerciseMedia } from '../media.js';
@@ -9,9 +9,14 @@ import { activeProfileID } from '../session.js';
 import { confirmDialog } from '../ui.js';
 
 const RANGES = { '6-8': '6–8', '8-10': '8–10', '8-12': '8–12', '10-15': '10–15', '12-15': '12–15' };
-/** Series y rango de repeticiones con botones rápidos. */
-export function PrescriptionPicker({ value, onChange }) {
+const MINUTES = { '10-15': '10–15', '15-20': '15–20', '20-30': '20–30', '30-45': '30–45', '45-60': '45–60' };
+/** Series y rango de repeticiones con botones rápidos (en cardio, minutos). */
+export function PrescriptionPicker({ value, onChange, cardio = false }) {
   const range = `${value.repsMin}-${value.repsMax}`;
+  if (cardio) {
+    return html`<${Field} group label="Minutos"><${Segmented} options=${MINUTES} value=${MINUTES[range] ? range : ''}
+      onChange=${(v) => { const [repsMin, repsMax] = v.split('-').map(Number); onChange({ ...value, sets: 1, repsMin, repsMax }); }} /><//>`;
+  }
   return html`
     <div class="stack">
       <${Field} group label="Series"><${Segmented} options=${{ 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' }} value=${String(value.sets)} onChange=${(v) => onChange({ ...value, sets: Number(v) })} /><//>
@@ -22,24 +27,54 @@ export function PrescriptionPicker({ value, onChange }) {
 
 export const MuscleTile = ({ muscle }) => html`<${Tile} color=${D.muscleColor(muscle)} text=${(muscle ?? '?').slice(0, 2)} />`;
 
-/** Lista de la biblioteca con búsqueda y filtro por músculo; agrupada por músculo. */
+/**
+ * Elegir 2 o más ejercicios para hacerlos seguidos, sin descanso entre ellos (biserie, triserie o circuito).
+ * `items`: ejercicios de la rutina o del entrenamiento; `nameOf(item)` el nombre a mostrar.
+ */
+export function GroupSheet({ items, nameOf, onGroup, onClose }) {
+  const [chosen, setChosen] = useState(() => new Set());
+  const toggle = (id) => { const next = new Set(chosen); next.has(id) ? next.delete(id) : next.add(id); setChosen(next); };
+  const n = chosen.size;
+  return html`
+    <${Sheet} title="Biserie o triserie" onClose=${onClose}>
+      <p class="muted small" style="margin-top:0">Elige los ejercicios que harás seguidos, sin descanso entre ellos. Al terminar la vuelta descansas y repites.</p>
+      <div class="list">${items.map((x) => html`<${Row} title=${nameOf(x)} onClick=${() => toggle(x.id)} chevron=${false}
+        right=${html`<span class=${`pick ${chosen.has(x.id) ? 'on' : ''}`}>${chosen.has(x.id) && html`<${Icon} name="check" size=${16} />`}</span>`} />`)}</div>
+      <div class="sheet-dock">
+        <button class="btn primary block big" disabled=${n < 2} onClick=${() => onGroup([...chosen])}>
+          ${n < 2 ? 'Elige 2 o más ejercicios' : `Hacer ${data.blockName(n).toLowerCase()} (${n} ejercicios)`}</button>
+      </div>
+    <//>`;
+}
+
+/** Clave de un ejercicio de la lista: su id, o su nombre si aún es del catálogo (se agrega al elegirlo). */
+const pickKey = (e) => e.id ?? `catalog:${e.name}`;
+/** Ejercicio de la biblioteca para una clave de la lista (agrega el del catálogo si hace falta). */
+const resolvePick = (key) => (key.startsWith('catalog:') ? data.exerciseNamed(key.slice(8)) : data.exercise(key));
+
+/**
+ * Biblioteca y catálogo con búsqueda (en español o inglés, sin importar cómo se muestren los nombres) y filtro por músculo;
+ * agrupada por músculo. `onPick` recibe el ejercicio de la lista (los del catálogo llegan sin id).
+ */
 function SearchList({ onPick, hrefFor, selected }) {
   const [query, setQuery] = useState('');
   const [muscle, setMuscle] = useState('');
-  const all = data.exercises();
+  const all = [...data.exercises(), ...data.catalogExtras()];
   const muscleOf = (e) => (e.primaryMuscle ?? '').trim() || 'Sin especificar';
   const muscles = [...new Set(all.map(muscleOf))].sort((a, b) => a.localeCompare(b, 'es'));
-  // Busca por el nombre guardado y por su nombre en español; ordena por el nombre que se muestra.
-  const searchable = (e) => ({ ...e, aliasesText: `${e.aliasesText ?? ''} ${spanishName(e.name) ?? ''}` });
+  // Busca por el nombre guardado, su nombre en español o inglés y otras palabras; ordena por el nombre que se muestra.
+  const searchable = (e) => ({ ...e, aliasesText: `${e.aliasesText ?? ''} ${searchAliases(e.name)}` });
   const list = all.filter((e) => (!query.trim() || D.matchesSearch(searchable(e), query)) && (!muscle || muscleOf(e) === muscle))
     .sort((a, b) => N(a.name).localeCompare(N(b.name), 'es'));
   const groups = query.trim() ? [['Resultados', list]] : muscles.filter((m) => !muscle || m === muscle)
     .map((m) => [m, list.filter((e) => muscleOf(e) === m)]).filter(([, items]) => items.length);
-  const row = (e) => html`<${Row} icon=${html`<${MuscleTile} muscle=${e.primaryMuscle} />`} title=${N(e.name)} sub=${`${e.equipment} · ${D.LOAD_TYPES[e.loadType]}`}
-    onClick=${onPick && (() => onPick(e))} href=${hrefFor?.(e)} chevron=${!selected}
-    right=${selected && html`<span class=${`pick ${selected.has(e.id) ? 'on' : ''}`}>${selected.has(e.id) && html`<${Icon} name="check" size=${16} />`}</span>`} />`;
+  // «Máquina · Máquina» o «Peso corporal · Peso corporal» se muestran una sola vez.
+  const subOf = (e) => [...new Set([e.equipment, D.LOAD_TYPES[e.loadType]].filter((t) => t && t !== 'Sin especificar'))].join(' · ') || 'Sin especificar';
+  const row = (e) => html`<${Row} icon=${html`<${MuscleTile} muscle=${e.primaryMuscle} />`} title=${N(e.name)} sub=${subOf(e)}
+    onClick=${onPick && (() => onPick(e))} href=${e.id ? hrefFor?.(e) : undefined} chevron=${!selected}
+    right=${selected && html`<span class=${`pick ${selected.has(pickKey(e)) ? 'on' : ''}`}>${selected.has(pickKey(e)) && html`<${Icon} name="check" size=${16} />`}</span>`} />`;
   return html`
-    <input class="input" type="search" placeholder="Buscar por nombre, músculo o equipo" value=${query} onInput=${(e) => setQuery(e.target.value)} />
+    <input class="input" type="search" placeholder="Buscar en español o inglés, por músculo o equipo" value=${query} onInput=${(e) => setQuery(e.target.value)} />
     <div class="chips">
       <button class=${`chip ${!muscle ? 'on' : ''}`} onClick=${() => setMuscle('')}>Todos</button>
       ${muscles.map((m) => html`<button class=${`chip ${muscle === m ? 'on' : ''}`} style=${`--tint:${D.muscleColor(m)}`} onClick=${() => setMuscle(muscle === m ? '' : m)}><i></i>${m}</button>`)}
@@ -57,12 +92,20 @@ export function ExercisePicker({ title = 'Elegir ejercicio', onPick, onPickMany,
   const [selected, setSelected] = useState(() => new Set());
   const [single, setSingle] = useState(null);
   const [rx, setRx] = useState({ sets: 3, repsMin: 8, repsMax: 12 });
-  const toggle = (e) => { const next = new Set(selected); next.has(e.id) ? next.delete(e.id) : next.add(e.id); setSelected(next); };
-  const choose = (e) => (multiple ? toggle(e) : prescription ? setSingle(e) : onPick(e));
+  const toggle = (e) => { const key = pickKey(e); const next = new Set(selected); next.has(key) ? next.delete(key) : next.add(key); setSelected(next); };
+  const choose = (picked) => {
+    if (multiple) { toggle(picked); return; }
+    const e = picked.id ? picked : run(() => resolvePick(pickKey(picked)));
+    if (!e) return;
+    if (!prescription) { onPick(e); return; }
+    if (D.isCardio(e.loadType)) setRx({ ...data.CARDIO_RX });
+    setSingle(e);
+  };
+  const addMany = () => { const ids = run(() => [...selected].map((key) => resolvePick(key).id)); if (ids) onPickMany(ids, rx); };
   if (single) {
     return html`<${Sheet} title=${N(single.name)} onClose=${() => setSingle(null)}
       right=${html`<button class="btn plain" onClick=${() => onPick(single, rx)}>Añadir</button>`}>
-      <div class="card"><${PrescriptionPicker} value=${rx} onChange=${setRx} /></div>
+      <div class="card"><${PrescriptionPicker} value=${rx} onChange=${setRx} cardio=${D.isCardio(single.loadType)} /></div>
       ${footer?.(rx)}
       <button class="btn primary block big" style="margin-top:16px" onClick=${() => onPick(single, rx)}><${Icon} name="plus" /> Añadir ${N(single.name)}</button>
     <//>`;
@@ -72,7 +115,7 @@ export function ExercisePicker({ title = 'Elegir ejercicio', onPick, onPickMany,
       <${SearchList} onPick=${choose} selected=${multiple ? selected : null} />
       ${multiple && html`<div class="sheet-dock">
         ${selected.size > 0 && html`<${PrescriptionPicker} value=${rx} onChange=${setRx} />`}
-        <button class="btn primary block big" disabled=${!selected.size} onClick=${() => onPickMany([...selected], rx)}>
+        <button class="btn primary block big" disabled=${!selected.size} onClick=${addMany}>
           ${selected.size ? `Añadir ${selected.size} ${selected.size === 1 ? 'ejercicio' : 'ejercicios'} · ${rx.sets} × ${rx.repsMin}–${rx.repsMax}` : 'Elige uno o varios ejercicios'}
         </button></div>`}
     <//>
@@ -88,7 +131,7 @@ export function Library() {
       ${missing > 0 && html`<button class="notice" onClick=${() => setReview(true)}>
         <span class="notice-icon">💡</span><span class="spacer"><b>${missing} ${missing === 1 ? 'ejercicio' : 'ejercicios'} sin tipo de carga</b>
         <span class="small muted">Complétalos para recibir sugerencias y récords</span></span><span class="chev">›</span></button>`}
-      <${SearchList} hrefFor=${(e) => `ejercicio/${e.id}`} />
+      <${SearchList} hrefFor=${(e) => `ejercicio/${e.id}`} onPick=${(e) => { if (!e.id) { const added = run(() => data.exerciseNamed(e.name)); if (added) go(`ejercicio/${added.id}`); } }} />
     <//>
     ${creating && html`<${ExerciseForm} onClose=${() => setCreating(false)} onSaved=${(e) => { setCreating(false); go(`ejercicio/${e.id}`); }} />`}
     ${review && html`<${LoadTypeReview} onClose=${() => setReview(false)} />`}`;
@@ -98,7 +141,8 @@ export function Library() {
 const LOAD_CHOICES = [
   ['totalWeight', 'Barra o peso libre total'], ['dumbbellPerHand', 'Peso de cada mancuerna'], ['machine', 'Placas o pines'],
   ['cable', 'Polea o cable'], ['bodyweight', 'Solo tu cuerpo'], ['bodyweightPlusLoad', 'Cuerpo + disco o cinturón'],
-  ['assisted', 'Máquina que te ayuda'], ['noExternalLoad', 'Sin peso (p. ej. plancha)'], ['unspecified', 'Lo decido después'],
+  ['assisted', 'Máquina que te ayuda'], ['noExternalLoad', 'Sin peso (p. ej. plancha)'], ['cardio', 'Minutos y distancia (caminadora, bici…)'],
+  ['unspecified', 'Lo decido después'],
 ];
 const EQUIPMENT_FOR = { totalWeight: 'Barra', dumbbellPerHand: 'Mancuernas', machine: 'Máquina', cable: 'Polea', assisted: 'Máquina' };
 
@@ -106,7 +150,7 @@ export function ExerciseForm({ exercise, onClose, onSaved }) {
   const [f, setF] = useState(exercise ?? { name: '', primaryMuscle: '', equipment: '', loadType: 'unspecified', isUnilateral: false, instructionsText: '', aliasesText: '' });
   const set = (k) => (v) => setF({ ...f, [k]: v });
   const save = () => run(() => { const saved = data.saveExercise(f); toast('Ejercicio guardado'); onSaved?.(saved); });
-  const muscles = [...new Set([...data.exercises().map((e) => e.primaryMuscle), 'Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Cuádriceps', 'Isquiotibiales', 'Glúteos', 'Gemelos', 'Abdomen'])]
+  const muscles = [...new Set([...data.exercises().map((e) => e.primaryMuscle), 'Pecho', 'Espalda', 'Espalda baja', 'Hombros', 'Bíceps', 'Tríceps', 'Cuádriceps', 'Isquiotibiales', 'Glúteos', 'Gemelos', 'Abdomen', 'Cardio'])]
     .filter((m) => m && m !== 'Sin especificar').sort((a, b) => a.localeCompare(b, 'es'));
   return html`
     <${Sheet} title=${exercise ? 'Editar ejercicio' : 'Nuevo ejercicio'} onClose=${onClose}
@@ -335,17 +379,21 @@ const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
  * alternando inicio ↔ final como animación. `editable` muestra los botones para agregar, cambiar o quitar.
  */
 export function ExerciseVisual({ exercise, editable = false, compact = false, onClick }) {
-  const custom = customMedia(exercise.id);
+  const stored = customMedia(exercise.id);
   const frames = builtInFrames(exercise);
   const [url, setUrl] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [frame, setFrame] = useState(0);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let alive = true;
-    setUrl(null);
-    if (custom) mediaURL(custom).then((u) => alive && setUrl(u)).catch(() => {});
+    setUrl(null); setFailed(false);
+    if (stored) mediaURL(stored).then((u) => { if (alive) (u ? setUrl(u) : setFailed(true)); }).catch(() => alive && setFailed(true));
     return () => { alive = false; };
-  }, [custom?.id]);
+  }, [stored?.id, attempt]);
+  // Si el medio de la familia no carga (sin conexión, o aún no termina de subirse), se muestra la foto incluida.
+  const custom = stored && !(failed && frames) ? stored : null;
   useEffect(() => {
     if (custom || !frames || frames.length < 2 || calm()) return undefined;
     const t = setInterval(() => setFrame((f) => (f + 1) % frames.length), 1000);
@@ -366,7 +414,7 @@ export function ExerciseVisual({ exercise, editable = false, compact = false, on
   }
   async function remove() {
     if (!(await confirmDialog('¿Quitar esta imagen?', { message: frames ? 'Volverá a mostrarse la foto incluida.' : 'El ejercicio quedará sin imagen.', confirm: 'Quitar', danger: true }))) return;
-    try { await removeExerciseMedia(custom.id); } catch (error) { toast(`No se pudo quitar: ${error.message ?? error}`); }
+    try { await removeExerciseMedia(stored.id); } catch (error) { toast(`No se pudo quitar: ${error.message ?? error}`); }
   }
 
   const has = custom || frames;
@@ -375,6 +423,7 @@ export function ExerciseVisual({ exercise, editable = false, compact = false, on
     ? (url ? (custom.kind === 'video'
         ? html`<video src=${url} autoplay muted loop playsinline aria-label=${`Video de ${N(exercise.name)}`}></video>`
         : html`<img src=${url} alt=${`Cómo se hace ${N(exercise.name)}`} />`)
+      : failed ? html`<span class="visual-loading" role="button" onClick=${(e) => { e.stopPropagation(); setAttempt((a) => a + 1); }}>No se pudo cargar.<br /><u>Reintentar</u></span>`
       : html`<span class="visual-loading">Cargando…</span>`)
     : frames ? frames.map((src, i) => html`<img src=${src} alt=${i === 0 ? `Cómo se hace ${N(exercise.name)}` : ''} class=${i === frame ? 'on' : ''} loading="lazy" />`)
     : html`<span class="visual-empty">📷<br />Sin imagen</span>`;
@@ -383,10 +432,11 @@ export function ExerciseVisual({ exercise, editable = false, compact = false, on
     <div class="visual-wrap">
       <div class=${`visual ${frames && !custom ? 'frames' : ''}`} onClick=${() => frames && !custom && calm() && setFrame((f) => (f + 1) % frames.length)}>${media}</div>
       ${editable && html`<div class="hstack visual-actions">
-        <label class=${`btn ${busy ? 'disabled' : ''}`}>${busy ? 'Guardando…' : custom ? 'Cambiar imagen' : html`<${Icon} name="camera" /> Agregar foto, GIF o video`}
+        <label class=${`btn ${busy ? 'disabled' : ''}`}>${busy ? 'Guardando…' : stored ? 'Cambiar imagen' : html`<${Icon} name="camera" /> Agregar foto, GIF o video`}
           <input type="file" accept="image/*,video/*" class="visually-hidden" disabled=${busy} onChange=${pick} /></label>
-        ${custom && html`<button class="btn plain danger" onClick=${remove}>Quitar</button>`}
+        ${stored && html`<button class="btn plain danger" onClick=${remove}>Quitar</button>`}
       </div>
-      <p class="muted small" style="margin:6px 0 0">${custom ? 'Agregada por tu familia: la ven todos los perfiles.' : frames ? 'Foto de referencia. Puedes cambiarla por tu propio GIF o video; la verán todos los perfiles.' : 'Agrega una foto, GIF o video para que toda la familia lo identifique.'}</p>`}
+      <p class="muted small" style="margin:6px 0 0">${stored && !custom ? html`La imagen de tu familia no cargó (¿sin conexión?); se muestra la foto incluida. <button class="link-btn" onClick=${() => setAttempt((a) => a + 1)}>Reintentar</button>`
+        : custom ? 'Agregada por tu familia: la ven todos los perfiles.' : frames ? 'Foto de referencia. Puedes cambiarla por tu propio GIF o video; la verán todos los perfiles.' : 'Agrega una foto, GIF o video para que toda la familia lo identifique.'}</p>`}
     </div>`;
 }

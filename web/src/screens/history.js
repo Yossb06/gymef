@@ -48,7 +48,8 @@ export function HistoryDetail({ owner, id }) {
   // Una serie nueva parte de la última registrada en ese ejercicio.
   const draftFor = (we) => {
     const last = data.setsOf(we.id).at(-1);
-    return { weight: last?.weight ?? 0, reps: last?.reps ?? we.repsMin, loadType: we.loadType, unit: last?.unit ?? data.unitFor(owner, we.originalExerciseID) };
+    return { weight: last?.weight ?? 0, reps: last?.reps ?? we.repsMin, loadType: we.loadType, unit: last?.unit ?? data.unitFor(owner, we.originalExerciseID),
+      durationSeconds: last?.durationSeconds ?? we.repsMin * 60, distanceKm: last?.distanceKm ?? null };
   };
   const removeExercise = async (we) => {
     if (await confirmDialog(`¿Quitar ${N(we.name)}?`, { message: 'Se borrarán sus series de este entrenamiento.', confirm: 'Quitar', danger: true })) run(() => data.deleteWorkoutExercise(we.id, owner));
@@ -77,9 +78,9 @@ export function HistoryDetail({ owner, id }) {
     <//>
     ${sheet === 'dates' && html`<${DatesSheet} owner=${owner} session=${session} onClose=${() => setSheet(null)} />`}
     ${sheet === 'exercise' && html`<${ExercisePicker} title="Añadir ejercicio" onClose=${() => setSheet(null)} onPick=${(ex) => { run(() => data.addExerciseToHistory(id, owner, ex.id)); setSheet(null); }} />`}
-    ${sheet?.edit && html`<${SetEditor} record=${sheet.edit} onClose=${() => setSheet(null)} onSave=${(w, r) => { run(() => { data.updateSet(sheet.edit.id, owner, w, r, null, { active: false }); setSheet(null); }); }} />`}
-    ${sheet?.add && html`<${SetEditor} title="Nueva serie" record=${draftFor(sheet.add)}
-      onClose=${() => setSheet(null)} onSave=${(w, r) => { run(() => { data.addSetToHistory(sheet.add.id, owner, w, r, draftFor(sheet.add).unit); setSheet(null); }); }} />`}`;
+    ${sheet?.edit && html`<${SetEditor} record=${sheet.edit} onClose=${() => setSheet(null)} onSave=${(w, r, c) => { run(() => { data.updateSet(sheet.edit.id, owner, w, r, null, { active: false, cardio: c }); setSheet(null); }); }} />`}
+    ${sheet?.add && html`<${SetEditor} title=${D.isCardio(sheet.add.loadType) ? 'Nuevo cardio' : 'Nueva serie'} record=${draftFor(sheet.add)}
+      onClose=${() => setSheet(null)} onSave=${(w, r, c) => { run(() => { data.addSetToHistory(sheet.add.id, owner, w, r, draftFor(sheet.add).unit, c); setSheet(null); }); }} />`}`;
 }
 
 function DatesSheet({ owner, session, onClose }) {

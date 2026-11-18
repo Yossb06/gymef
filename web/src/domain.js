@@ -4,10 +4,33 @@ export const LOAD_TYPES = {
   unspecified: 'Sin especificar', totalWeight: 'Peso total', dumbbellPerHand: 'Peso por mancuerna',
   machine: 'Máquina', cable: 'Polea', bodyweight: 'Peso corporal',
   bodyweightPlusLoad: 'Peso corporal + lastre', assisted: 'Asistido', noExternalLoad: 'Sin carga externa',
+  cardio: 'Cardio',
 };
 export const WEEKDAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 export const zeroLoad = (load) => load === 'bodyweight' || load === 'noExternalLoad';
 export const isUnit = (u) => u === 'kg' || u === 'lb';
+
+// ---------- Cardio ----------
+// Una serie de cardio guarda minutos (durationSeconds) y, si se quiere, distancia (distanceKm); peso 0 y 1 repetición
+// para que el resto de la app (y el respaldo) la acepten. No cuenta para repeticiones, volumen ni récords de carga.
+export const isCardio = (load) => load === 'cardio';
+export function cardioLabel({ durationSeconds, distanceKm }) {
+  const minutes = Math.round(((durationSeconds ?? 0) / 60) * 10) / 10;
+  return `${display(minutes)} min${distanceKm ? ` · ${display(distanceKm)} km` : ''}`;
+}
+const filled = (text) => String(text ?? '').trim() !== '';
+export function validateCardio(minutesText, distanceText) {
+  const m = parseNumber(minutesText);
+  if (m === null || m <= 0) return 'Escribe cuántos minutos hiciste.';
+  if (m > 600) return 'Revisa los minutos.';
+  const d = filled(distanceText) ? parseNumber(distanceText) : 0;
+  if (d === null || d < 0 || d >= 1000) return 'Revisa la distancia.';
+  return null;
+}
+export const cardioValues = (minutesText, distanceText) => ({
+  durationSeconds: Math.round(parseNumber(minutesText) * 60),
+  distanceKm: filled(distanceText) && parseNumber(distanceText) > 0 ? parseNumber(distanceText) : null,
+});
 
 // ---------- Unidades ----------
 const LB_PER_KG = 2.2046226218;
@@ -28,8 +51,10 @@ export function parseNumber(text) {
 export const resolveUnit = (profile, pref) =>
   (isUnit(pref?.preferredLoadUnit) && pref.preferredLoadUnit) || (isUnit(profile?.defaultLoadUnitRaw) && profile.defaultLoadUnitRaw) || 'kg';
 
-export function setLabel({ weight, reps, unit }, load) {
+export function setLabel(set, load) {
+  const { weight, reps, unit } = set;
   switch (load) {
+    case 'cardio': return cardioLabel(set);
     case 'bodyweight': case 'noExternalLoad': return `${reps} reps`;
     case 'dumbbellPerHand': return `${display(weight)} ${unit}/mancuerna × ${reps}`;
     case 'bodyweightPlusLoad': return `+${display(weight)} ${unit} × ${reps}`;
@@ -38,6 +63,7 @@ export function setLabel({ weight, reps, unit }, load) {
   }
 }
 export function recordLabel(r) {
+  if (isCardio(r.loadType)) return cardioLabel(r);
   if (zeroLoad(r.loadType)) return `${r.reps} reps`;
   const suffix = r.loadType === 'dumbbellPerHand' ? ' por mancuerna' : r.loadType === 'assisted' ? ' de asistencia' : '';
   return `${r.loadType === 'bodyweightPlusLoad' ? '+' : ''}${display(r.weight)} ${r.unit}${suffix} × ${r.reps}`;
@@ -73,7 +99,7 @@ export const libraryKey = (ex) => ({
 });
 export const keyId = (k) => [k.identity, k.loadType, k.equipment, k.unit, k.unilateral, k.repsConvention].join('\u0001');
 export const inUnit = (k, unit) => ({ ...k, unit });
-const hasLoadMetric = (k) => !['bodyweight', 'noExternalLoad', 'unspecified'].includes(k.loadType);
+const hasLoadMetric = (k) => !['bodyweight', 'noExternalLoad', 'unspecified', 'cardio'].includes(k.loadType);
 const hasLoadRecord = (k) => hasLoadMetric(k) && k.loadType !== 'assisted';
 const canEstimate = (k) => ['totalWeight', 'dumbbellPerHand'].includes(k.loadType) && isUnit(k.unit) && !k.unilateral && k.repsConvention === 'total';
 export function keyLoadLabel(k) {
@@ -84,7 +110,8 @@ export function keyLoadLabel(k) {
     default: return k.unit;
   }
 }
-export const keyConfigLabel = (k) => `${LOAD_TYPES[k.loadType] ?? k.loadType} · ${k.equipment}${k.unilateral ? ' · Reps por lado' : ''}`;
+// «Polea · Polea» o «Cardio · Cardio» se muestran una sola vez.
+export const keyConfigLabel = (k) => `${[...new Set([LOAD_TYPES[k.loadType] ?? k.loadType, k.equipment])].join(' · ')}${k.unilateral ? ' · Reps por lado' : ''}`;
 
 // ---------- Preferencias ----------
 export function incrementConfiguration(load, equipment, unilateral) {
@@ -99,6 +126,7 @@ export function evaluateProgression({ target, min: lower, max: upper, load, unil
   const range = [Math.max(1, lower), Math.max(Math.max(1, lower), upper)];
   const main = (source?.sets ?? []).slice(0, Math.max(0, Math.min(target, source?.targetSets ?? target)));
   const result = (kind, explanation, sets = main) => ({ kind, load, source, sets, explanation, range });
+  if (isCardio(load)) return result('historyOnly', 'Cardio: anota tus minutos y, si quieres, la distancia.', []);
   if (!(target > 0 && lower > 0 && upper >= lower)) return result('historyOnly', 'Revisa la prescripción antes de usar una sugerencia.', []);
   if (!main.length) return result('noHistory', 'Sin una sesión completada comparable. Registra tus valores dentro del rango objetivo.', []);
   if (!main.every((s) => Number.isFinite(s.weight) && s.weight >= 0 && s.reps > 0) || (zeroLoad(load) && !main.every((s) => s.weight === 0)))
@@ -206,12 +234,19 @@ export function e1rm(s) {
 }
 export function metricValue(metric, s) {
   if (!validSet(s)) return null;
+  if (isCardio(s.key.loadType)) {
+    if (metric === 'minutes') return s.durationSeconds > 0 ? s.durationSeconds / 60 : null;
+    if (metric === 'distance') return s.distanceKm > 0 ? s.distanceKm : null;
+    return null;
+  }
   if (metric === 'load') return hasLoadMetric(s.key) ? s.weight : null;
   if (metric === 'reps') return s.reps;
-  return e1rm(s);
+  if (metric === 'estimated1RM') return e1rm(s);
+  return null;
 }
-export const METRICS = { load: 'Carga', reps: 'Repeticiones', estimated1RM: '1RM estimado' };
+export const METRICS = { load: 'Carga', reps: 'Repeticiones', estimated1RM: '1RM estimado', minutes: 'Minutos', distance: 'Distancia (km)' };
 export function setProgressLabel(s) {
+  if (isCardio(s.key.loadType)) return cardioLabel(s);
   if (zeroLoad(s.key.loadType)) return `${s.reps} reps`;
   return `${s.key.loadType === 'bodyweightPlusLoad' ? '+' : ''}${display(s.weight)} ${keyLoadLabel(s.key)} × ${s.reps}`;
 }
@@ -260,10 +295,12 @@ export function overview(progress, interval) {
   const samples = selected.flatMap((s) => s.sets);
   const durations = selected.map((s) => s.endedAt && s.endedAt >= s.date ? s.endedAt - s.date : null).filter((d) => d !== null);
   const total = durations.reduce((a, b) => a + b, 0);
+  const strength = samples.filter((s) => !isCardio(s.key.loadType));
   return {
-    workouts: selected.length, sets: samples.length, reps: samples.reduce((a, s) => a + Math.max(0, s.reps), 0),
+    workouts: selected.length, sets: samples.length, reps: strength.reduce((a, s) => a + Math.max(0, s.reps), 0),
+    cardioMinutes: Math.round(samples.reduce((a, s) => a + (isCardio(s.key.loadType) ? (s.durationSeconds ?? 0) / 60 : 0), 0)),
     totalDuration: total, averageDuration: durations.length ? total / durations.length : null,
-    volume: volume(samples.map((s) => ({ weight: s.weight, reps: s.reps, loadType: s.key.loadType, unit: s.key.unit, unilateral: s.key.unilateral, repsConvention: s.key.repsConvention }))),
+    volume: volume(strength.map((s) => ({ weight: s.weight, reps: s.reps, loadType: s.key.loadType, unit: s.key.unit, unilateral: s.key.unilateral, repsConvention: s.key.repsConvention }))),
   };
 }
 export function chartPoints(group, metric, interval) {
@@ -340,9 +377,10 @@ function compare(before, after, key) {
   return { changes, summary: changes[0]?.label ?? none.summary };
 }
 const shortDate = (t) => new Date(t).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
-export const TREND_TITLES = { progressing: 'Progresando', stable: 'Estable', possiblePlateau: 'Posible estancamiento', insufficientData: 'Sin datos suficientes' };
+export const TREND_TITLES = { progressing: 'Progresando', stable: 'Estable', possiblePlateau: 'Posible estancamiento', insufficientData: 'Sin datos suficientes', cardio: 'Cardio' };
 export function trend(group, interval, related) {
   const insufficient = (m = 'Necesitas al menos dos sesiones comparables.') => ({ state: 'insufficientData', explanation: m });
+  if (isCardio(group.key.loadType)) return { state: 'cardio', explanation: 'Mira tus minutos y tu distancia en la gráfica.' };
   if (['assisted', 'unspecified'].includes(group.key.loadType))
     return insufficient('Historial disponible; esta semántica no permite concluir una tendencia automática.');
   const v = visits(group, interval);
@@ -433,6 +471,7 @@ const MUSCLE_COLORS = {
   biceps: '#8b5cf6', triceps: '#d946ef', cuadriceps: '#10b981', isquiotibiales: '#14b8a6', gluteos: '#ec4899',
   gemelos: '#06b6d4', abductores: '#84cc16', aductores: '#65a30d', abdomen: '#eab308', core: '#eab308',
   pectoral: '#ef4444', femoral: '#14b8a6', 'abdomen inferior': '#eab308', dorsal: '#3b82f6', antebrazo: '#a78bfa',
+  'espalda baja': '#2563eb', cardio: '#e11d48',
 };
 export const muscleColor = (muscle) => MUSCLE_COLORS[normalizedName(muscle ?? '')] ?? '#8e8e93';
 

@@ -3,7 +3,8 @@ import * as data from '../data.js';
 import { store } from '../store.js';
 import { exportBackup } from '../backup.js';
 import { cloud, selectProfile } from '../session.js';
-import { Page, Section, Row, Sheet, Segmented, DropZone, VERSION, Tile, run, toast, promptDialog, confirmDialog } from '../ui.js';
+import * as D from '../domain.js';
+import { Page, Section, Row, Sheet, Segmented, Field, DropZone, VERSION, Tile, run, toast, promptDialog, confirmDialog } from '../ui.js';
 import { MODES, TEXT_SIZES, THEMES, DEFAULT_APPEARANCE, seasonalTheme, applyAppearance } from '../theme.js';
 import { importFile } from './start.js';
 import { SyncBadge } from './home.js';
@@ -21,6 +22,7 @@ export function MoreView({ owner }) {
   const [install, setInstall] = useState(false);
   const [birthdays, setBirthdays] = useState(false);
   const [tools, setTools] = useState(false);
+  const [membership, setMembership] = useState(false);
   const rename = async () => {
     const name = await promptDialog('Nombre del perfil', { value: me.name });
     if (name) run(() => data.renameProfile(owner, name));
@@ -73,7 +75,8 @@ export function MoreView({ owner }) {
         </div>
       <//>
       <${Section} title="Herramientas">
-        <div class="list"><${Row} icon=${html`<${Tile} name="scale" color="#ff9f0a" />`} title="Calculadora de peso" sub="Convertir kg ↔ lb y qué discos poner en la barra" onClick=${() => setTools(true)} /></div>
+        <div class="list"><${Row} icon=${html`<${Tile} name="scale" color="#ff9f0a" />`} title="Calculadora de peso" sub="Sumar barra y discos, convertir kg ↔ lb y qué discos poner" onClick=${() => setTools(true)} />
+          <${Row} icon=${html`<${Tile} text="🎫" color="#14b8a6" />`} title="Membresía del gimnasio" sub=${membershipText(data.membershipStatus(owner))} onClick=${() => setMembership(true)} /></div>
       <//>
       <${Section} title="Datos y respaldos">
         <${DropZone} onFile=${(f) => run(() => importFile(f, { confirmReplace: true }))}><div class="list">
@@ -101,6 +104,7 @@ export function MoreView({ owner }) {
     <//>
     ${birthdays && html`<${BirthdaysSheet} onClose=${() => setBirthdays(false)} />`}
     ${tools && html`<${WeightTools} unit=${me.defaultLoadUnitRaw ?? 'kg'} onClose=${() => setTools(false)} />`}
+    ${membership && html`<${MembershipSheet} owner=${owner} onClose=${() => setMembership(false)} />`}
     ${install && html`<${Sheet} title="Instalar" onClose=${() => setInstall(false)}>
       <div class="card stack">
         <div><b>iPhone (Safari)</b><p class="small muted" style="margin:4px 0 0">Toca Compartir ⬆︎ → «Agregar a pantalla de inicio» → Agregar.</p></div>
@@ -108,6 +112,64 @@ export function MoreView({ owner }) {
         <p class="small muted" style="margin:0">Se abre a pantalla completa como una app y nunca caduca.</p>
       </div>
     <//>`}`;
+}
+
+const longDate = (t) => new Date(t).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' });
+const money = (v) => `$${D.display(v)}`;
+/** «Vence el 1 de diciembre de 2026 · faltan 14 días», o qué hacer si aún no hay ninguna. */
+export function membershipText(status) {
+  if (!status) return 'Anota cuándo la pagaste y cuánto costó';
+  const { daysLeft, endsAt } = status;
+  if (daysLeft < 0) return `Venció hace ${-daysLeft} ${daysLeft === -1 ? 'día' : 'días'} (${longDate(endsAt)})`;
+  if (daysLeft === 0) return 'Vence hoy';
+  return `Vence el ${longDate(endsAt)} · ${daysLeft === 1 ? 'falta 1 día' : `faltan ${daysLeft} días`}`;
+}
+const todayInput = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+
+/** Membresía del gimnasio: cuándo se pagó o renovó, por cuánto tiempo y el precio (solo de tu perfil). */
+function MembershipSheet({ owner, onClose }) {
+  const [paid, setPaid] = useState(todayInput());
+  const [months, setMonths] = useState('1');
+  const [price, setPrice] = useState(String(data.memberships(owner)[0]?.price ?? '').replace('.', ','));
+  const [note, setNote] = useState('');
+  const status = data.membershipStatus(owner);
+  const list = data.memberships(owner);
+  const save = () => run(() => {
+    const [y, m, d] = paid.split('-').map(Number);
+    const value = price.trim() ? D.parseNumber(price) : null;
+    if (price.trim() && value === null) throw new data.UserError('Revisa el precio.');
+    data.saveMembership(owner, { paidAt: new Date(y, m - 1, d).getTime(), months: Number(months), price: value, note });
+    setNote(''); toast('Pago guardado');
+  });
+  const remove = async (m) => {
+    if (await confirmDialog('¿Borrar este pago?', { message: `${longDate(m.paidAt)} · ${data.MEMBERSHIP_MONTHS[m.months] ?? `${m.months} meses`}`, confirm: 'Borrar', danger: true }))
+      run(() => data.deleteMembership(owner, m.id));
+  };
+  return html`
+    <${Sheet} title="Membresía" onClose=${onClose}>
+      ${status && html`<div class=${`card membership ${status.daysLeft < 0 ? 'late' : status.daysLeft <= 5 ? 'soon' : ''}`}>
+        <div class="caps">${status.daysLeft < 0 ? 'Vencida' : 'Vigente'}</div>
+        <div class="membership-days">${status.daysLeft < 0 ? 'Renueva tu membresía' : status.daysLeft === 0 ? 'Vence hoy' : `${status.daysLeft} ${status.daysLeft === 1 ? 'día' : 'días'}`}</div>
+        <div class="small muted">${membershipText(status)}</div>
+      </div>`}
+      <${Section} title=${status ? 'Registrar renovación' : 'Registrar pago'}>
+        <div class="card stack">
+          <label class="field"><span>Fecha en que pagaste o renovaste</span><input class="input" type="date" value=${paid} onInput=${(e) => setPaid(e.target.value)} /></label>
+          <${Field} group label="Duración"><${Segmented} options=${data.MEMBERSHIP_MONTHS} value=${months} onChange=${setMonths} /><//>
+          <label class="field"><span>Precio (opcional)</span><input class="input" inputmode="decimal" placeholder="Ej. 600" value=${price} onInput=${(e) => setPrice(e.target.value)} /></label>
+          <label class="field"><span>Nota (opcional)</span><input class="input" placeholder="Ej. promoción anual, gimnasio del centro…" value=${note} onInput=${(e) => setNote(e.target.value)} /></label>
+          <button class="btn primary block" disabled=${!paid} onClick=${save}>Guardar pago</button>
+        </div>
+      <//>
+      ${list.length > 0 && html`<${Section} title="Pagos anteriores">
+        <div class="list">${list.map((m) => html`<div class="row static">
+          <span class="grow"><div class="title">${longDate(m.paidAt)}</div>
+            <div class="sub">${[data.MEMBERSHIP_MONTHS[m.months] ?? `${m.months} meses`, m.price != null && money(m.price), m.note].filter(Boolean).join(' · ')}</div></span>
+          <button class="btn plain danger" onClick=${() => remove(m)}>Borrar</button></div>`)}</div>
+        ${list.some((m) => m.price != null) && html`<p class="muted small">Total pagado: ${money(list.reduce((a, m) => a + (m.price ?? 0), 0))}</p>`}
+      <//>`}
+      <p class="muted small">Solo la ve tu perfil. La app te avisa en Inicio cuando falten 5 días o menos.</p>
+    <//>`;
 }
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];

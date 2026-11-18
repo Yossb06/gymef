@@ -182,6 +182,14 @@ const VARIATION_GUIDES = {
   'Aductores con banda': { steps: ['Banda atada a un poste a la altura del tobillo, por dentro de la pierna.', 'Lleva la pierna hacia la otra cruzando un poco.', 'Regresa despacio.'], tips: ['Sostente de algo para el equilibrio.'] },
   'Crunch abdominal': { steps: ['Boca arriba con las rodillas flexionadas y los pies en el suelo.', 'Sube los hombros del suelo apretando el abdomen.', 'Baja despacio.'], tips: ['No jales el cuello con las manos.'] },
   'Elevación de piernas en banco': { steps: ['Acostado en un banco, sujétate detrás de la cabeza.', 'Sube las piernas casi rectas hasta la vertical.', 'Baja despacio sin tocar el banco.'], tips: ['Espalda baja pegada al banco.'] },
+  'Caminadora': { steps: ['Camina 3–5 minutos a paso cómodo para calentar.', 'Sube poco a poco la velocidad o la inclinación hasta un ritmo en el que todavía puedas hablar con frases cortas.', 'Termina con 3–5 minutos más lentos para enfriar.'], tips: ['No te sostengas de los pasamanos: camina erguido y con pasos naturales.', 'Engancha el clip de seguridad si la máquina lo tiene.'] },
+  'Bicicleta estática': { steps: ['Ajusta el asiento: con el pedal abajo, la rodilla queda casi estirada.', 'Pedalea suave 3–5 minutos y luego sube la resistencia.', 'Mantén un ritmo constante y baja la resistencia al final para enfriar.'], tips: ['Espalda recta y hombros relajados.', 'Si te molestan las rodillas, revisa la altura del asiento.'] },
+  'Bicicleta reclinada': { steps: ['Ajusta el asiento: con el pedal adelante, la rodilla queda casi estirada.', 'Pedalea suave para calentar y sube la resistencia poco a poco.', 'Termina con unos minutos suaves.'], tips: ['Buena opción si te molesta la espalda baja.'] },
+  'Elíptica': { steps: ['Sube con cuidado y toma las manijas.', 'Empuja y jala con brazos y piernas a un ritmo cómodo; sube la resistencia poco a poco.', 'Baja el ritmo los últimos minutos.'], tips: ['Pies completos sobre los pedales; no te recargues en la consola.'] },
+  'Escaladora': { steps: ['Empieza lento; los pasamanos son solo para equilibrarte.', 'Sube cada escalón con todo el pie apoyado.', 'Ajusta la velocidad a un ritmo que puedas mantener.'], tips: ['No te cuelgues de los pasamanos: le quita trabajo a las piernas.'] },
+  'Máquina de remo': { steps: ['Pies sujetos y toma el manubrio con los brazos estirados.', 'Empuja primero con las piernas, luego lleva el torso un poco hacia atrás y al final jala el manubrio al abdomen.', 'Regresa en orden inverso: brazos, torso y piernas.'], tips: ['Espalda recta todo el tiempo.', 'La fuerza sale de las piernas, no de los brazos.'] },
+  'Saltar la cuerda': { steps: ['Codos cerca del cuerpo; gira la cuerda con las muñecas.', 'Salta poco, sobre la punta de los pies.', 'Haz intervalos: por ejemplo 30 segundos saltando y 30 descansando.'], tips: ['Usa tenis con buena amortiguación y evita superficies muy duras.'] },
+  'Crunch en máquina': { steps: ['Ajusta el asiento: el punto de giro de la máquina debe quedar a la altura de tu abdomen.', 'Codos sobre las almohadillas y manos en las manijas, solo para sostenerte.', 'Enrolla el tronco hacia la cadera apretando el abdomen, sin jalar con los brazos, y regresa despacio.'], tips: ['Exhala al bajar el pecho.', 'Empieza con poco peso: si la cadera o los brazos ayudan, es demasiado.'] },
 };
 for (const [name, guide] of Object.entries(VARIATION_GUIDES)) GUIDES[name] = guide;
 
@@ -227,6 +235,10 @@ const PATTERNS = {
     safety: ['Empieza con poco peso: el equilibrio es parte del ejercicio.', 'Rodilla de adelante alineada con el pie.', 'Apóyate en algo si pierdes el equilibrio.'] },
   bisagra: { about: 'Bisagra de cadera: la parte de atrás de la pierna y los glúteos.', primary: ['Isquiotibiales', 'Glúteos'], secondary: ['Espalda baja', 'Antebrazo (agarre)'],
     safety: ['El movimiento es de cadera: espalda recta en todo momento.', 'Baja solo hasta sentir estiramiento atrás de los muslos; si la espalda se redondea, bajaste de más.', 'Peso pegado a las piernas.'] },
+  cardio: { about: 'Cardio: mejora tu resistencia y la salud del corazón, y ayuda a quemar calorías.', primary: ['Corazón y pulmones (resistencia)'], secondary: ['Piernas', 'Glúteos'],
+    safety: ['Calienta 3–5 minutos a ritmo suave antes de subir la intensidad.', 'Toma agua y baja el ritmo si te mareas o te falta mucho el aire.', 'Si tienes alguna condición del corazón, consulta a tu médico antes de entrenar fuerte.'] },
+  lumbar: { about: 'Extensión de espalda: fortalece la espalda baja y los glúteos.', primary: ['Espalda baja (erectores de la columna)'], secondary: ['Glúteos', 'Isquiotibiales'],
+    safety: ['Sube solo hasta alinear el cuerpo; no te arquees hacia atrás.', 'Movimiento lento, sin impulso ni rebotes.', 'Si tienes dolor de espalda baja, empieza sin peso y con poco recorrido.'] },
   gluteo: { about: 'Extensión de cadera: el mejor trabajo directo de glúteos.', primary: ['Glúteos'], secondary: ['Isquiotibiales', 'Abdomen'],
     safety: ['Sube hasta alinear cadera y torso, sin arquear la espalda baja.', 'Usa un cojín en la barra para no lastimar la cadera.', 'Barbilla hacia el pecho para mantener la columna neutra.'] },
   curlFemoral: { about: 'Flexión de rodilla: aísla los isquiotibiales.', primary: ['Isquiotibiales'], secondary: ['Gemelos'],
@@ -261,13 +273,14 @@ const PATTERN_OF = {
   sentadilla: ['Squat', 'Smith squat', 'Sentadilla frontal', 'Sentadilla goblet', 'Goblet saquat', 'Sentadilla con mancuernas'],
   sentadillaMaquina: ['Pendulum squat', 'Hack squat', 'Prensa', 'Sentadilla máquina hammer'],
   unilateralPierna: ['Sentadilla búlgara con mancuernas', 'Zancadas con mancuernas', 'Subidas al banco con mancuernas'],
-  bisagra: ['Romanian deadlift', 'Peso muerto rumano con mancuernas', 'Extensiones de espalda'],
+  bisagra: ['Romanian deadlift', 'Peso muerto rumano con mancuernas'], lumbar: ['Extensiones de espalda'],
+  cardio: ['Caminadora', 'Bicicleta estática', 'Bicicleta reclinada', 'Elíptica', 'Escaladora', 'Máquina de remo', 'Saltar la cuerda'],
   gluteo: ['Hip thrust con barra', 'Puente de glúteo a una pierna'],
   curlFemoral: ['Lying leg curl', 'Seated leg curl', 'Sitting Leg Curl', 'Curl femoral con pelota'],
   extensionCuadriceps: ['Leg extension'],
   abductores: ['Hip abduction'], aductores: ['Hip adduction', 'Aductores con banda'],
   gemelos: ['Standing calf raise', 'Elevación de talones sentado', 'Elevación de talones con mancuernas', 'Elevación de talones en prensa'],
-  crunch: ['Ab crunch', 'Crunch abdominal'], elevacionPiernas: ['Leg raises', 'Elevación de piernas en banco'],
+  crunch: ['Ab crunch', 'Crunch abdominal', 'Crunch en máquina'], elevacionPiernas: ['Leg raises', 'Elevación de piernas en banco'],
 };
 const PATTERN_BY_NAME = new Map(Object.entries(PATTERN_OF).flatMap(([key, names]) => names.map((n) => [normalizedName(n), PATTERNS[key]])));
 
