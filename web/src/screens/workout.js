@@ -3,7 +3,8 @@ import * as data from '../data.js';
 import * as D from '../domain.js';
 import { N } from '../catalog.js';
 import { store, newId } from '../store.js';
-import { Page, Section, Row, Sheet, Field, Stepper, RestTimer, restTimer, go, replaceRoute, run, confirmDialog, useTick, useWakeLock, toast, Icon, Tile, ProgressRing, Confetti } from '../ui.js';
+import { Page, Section, Row, Sheet, Field, RestTimer, restTimer, go, replaceRoute, run, confirmDialog, useTick, useWakeLock, toast, Icon, Tile, ProgressRing, Confetti } from '../ui.js';
+import { NumberStepper } from '../keypad.js';
 import { themeEmoji } from '../theme.js';
 import { ExercisePicker, PreferenceSheet, GuideSheet, LoadTypeReview, ExerciseVisual, GroupSheet } from './exercises.js';
 import { WeightTools } from './tools.js';
@@ -207,38 +208,41 @@ function CardioEditor({ record, onSave, onClose, title = 'Editar cardio' }) {
     <//>`;
 }
 
-/** Cardio: minutos (obligatorio) y distancia en km (opcional). */
+/** Cardio: minutos (obligatorio) y distancia en km (opcional), con el teclado propio de la app. */
 export function CardioInputs({ minutes, distance, setMinutes, setDistance }) {
   const m = D.parseNumber(minutes), d = D.parseNumber(distance);
   return html`
     <div class="stack">
       <div><div class="small muted" style="margin:0 4px 6px">Tiempo (minutos)</div>
-        <${Stepper} label="minutos" decimal value=${minutes} onInput=${setMinutes}
+        <${NumberStepper} label="minutos" title="Minutos" mode="decimal" value=${minutes} onChange=${setMinutes}
           onStep=${(x) => setMinutes(D.inputNumber(Math.max(1, Math.round((m ?? 0) + x))))} /></div>
       <div><div class="small muted" style="margin:0 4px 6px">Distancia en km (opcional)</div>
-        <${Stepper} label="distancia" decimal value=${distance} onInput=${setDistance}
+        <${NumberStepper} label="distancia" title="Distancia (km)" mode="decimal" value=${distance} onChange=${setDistance}
           onStep=${(x) => setDistance(D.inputNumber(Math.max(0, Math.round(((d ?? 0) + x * 0.1) * 10) / 10)))} /></div>
     </div>`;
 }
 
+/** Peso y repeticiones de una serie. Tocar el número abre la calculadora de la app (suma discos en kg o lb). */
 export function SetInputs({ load, unit, increment, weight, reps, setWeight, setReps }) {
   const [tools, setTools] = useState(false);
   const weightLabel = load === 'assisted' ? `Asistencia (${unit})` : load === 'dumbbellPerHand' ? `Peso por mancuerna (${unit})` : load === 'bodyweightPlusLoad' ? `Lastre (+${unit})` : `Peso (${unit})`;
   const value = D.parseNumber(weight);
   const other = unit === 'kg' ? 'lb' : 'kg';
+  const calcUnit = D.isUnit(unit) ? unit : 'kg';
   return html`
     <div class="stack">
       ${D.zeroLoad(load) ? html`<div class="muted">Sin carga externa</div>` : html`
-        <div><div class="hstack" style="margin:0 4px 6px"><span class="small muted spacer">${weightLabel}</span>
-            <button type="button" class="link-btn calc-link" onClick=${() => setTools(true)}><${Icon} name="scale" size=${15} /> Calculadora</button></div>
-          <${Stepper} label="peso" decimal value=${weight} onInput=${setWeight}
-            onStep=${(d) => setWeight(D.inputNumber(Math.max(0, (value ?? 0) + d * increment)))} />
+        <div>
+          <${NumberStepper} label="peso" title=${weightLabel} mode="weight" unit=${calcUnit} value=${weight} onChange=${setWeight} onTools=${() => setTools(true)}
+            onStep=${(d) => setWeight(D.inputNumber(Math.max(0, (value ?? 0) + d * increment)))}
+            header=${(open) => html`<div class="hstack" style="margin:0 4px 6px"><span class="small muted spacer">${weightLabel}</span>
+              <button type="button" class="link-btn calc-link" onClick=${open}><${Icon} name="scale" size=${15} /> Calculadora</button></div>`} />
           ${value > 0 && D.isUnit(unit) && html`<div class="conversion">${D.display(value)} ${unit} = ${D.display(Math.round(D.convert(value, unit, other) * 10) / 10)} ${other}</div>`}</div>`}
       <div><div class="small muted" style="margin:0 4px 6px">Repeticiones</div>
-        <${Stepper} label="repeticiones" value=${reps} onInput=${(v) => setReps(v.replace(/\D/g, ''))}
+        <${NumberStepper} label="repeticiones" title="Repeticiones" mode="integer" value=${reps} onChange=${setReps}
           onStep=${(d) => setReps(String(Math.max(1, (Number(reps) || 0) + d)))} /></div>
     </div>
-    ${tools && html`<${WeightTools} unit=${D.isUnit(unit) ? unit : 'kg'} start=${value > 0 ? value : null}
+    ${tools && html`<${WeightTools} unit=${calcUnit} start=${value > 0 ? value : null} initialTab="convert"
       onUse=${(w) => { setWeight(D.inputNumber(w)); setTools(false); }} onClose=${() => setTools(false)} />`}`;
 }
 

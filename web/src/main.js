@@ -104,6 +104,18 @@ function App() {
 
 render(html`<${App} /><${DialogHost} />`, document.getElementById('app'));
 
+// iPhone «Agitar para deshacer»: después de escribir en un campo, mover el teléfono abre «Deshacer texto escrito».
+// Al salir del campo se vuelve a poner su valor por código, lo que vacía esa memoria de deshacer del navegador.
+// (Peso, repeticiones y cardio ya no usan el teclado del teléfono: tienen el teclado propio de la app.)
+document.addEventListener('focusout', (e) => {
+  const el = e.target;
+  const text = el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && ['text', 'search'].includes(el.type));
+  if (!text) return;
+  const { value } = el;
+  el.value = `${value} `;
+  el.value = value;
+}, true);
+
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('./sw.js').then((reg) => {
     // La app instalada puede quedar abierta días: busca versión nueva cada vez que vuelve a primer plano.

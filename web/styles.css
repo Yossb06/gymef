@@ -194,12 +194,22 @@ textarea.input { min-height: 80px; resize: vertical; }
 .membership-days { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; margin: 2px 0; }
 .membership.soon .membership-days { color: var(--warn, #ff9f0a); }
 .membership.late .membership-days { color: var(--danger); }
-/* Calculadora: sumar barra y discos */
-.sum-total { text-align: center; }
-.sum-value { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.sum-items { justify-content: center; align-items: center; gap: 6px; }
-.sum-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.sum-grid .btn { min-height: 46px; font-size: 17px; font-weight: 700; padding: 6px 4px; }
+/* Teclado propio de la app, como calculadora (sin el teclado del teléfono) */
+.stepper-value { cursor: pointer; display: grid; place-items: center; color: var(--text); }
+.calc-display { background: var(--card-2); border-radius: 14px; padding: 10px 14px; text-align: right; min-height: 82px; display: flex; flex-direction: column; justify-content: flex-end; }
+.calc-expr { font-size: 15px; color: var(--muted); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.calc-value { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.1; }
+.calc-value.fresh { color: var(--muted); }
+.calc-value small { font-size: 18px; font-weight: 600; color: var(--muted); margin-left: 6px; }
+.calc-plates { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 10px 0 2px; scrollbar-width: none; }
+.calc-plates::-webkit-scrollbar, .calc-expr::-webkit-scrollbar { display: none; }
+.calc-plates > span { flex: none; margin-right: 2px; }
+.calc-plates .chip { flex: none; font-weight: 700; font-size: 15px; padding: 8px 12px; }
+.keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.key { min-height: 54px; border: 0; border-radius: 14px; background: var(--card-2); color: var(--text); font-size: 24px; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
+.key.op { background: color-mix(in srgb, var(--accent) 16%, var(--card-2)); color: var(--accent); }
+.key:disabled { visibility: hidden; }
+.key:active { transform: scale(0.96); }
 .timer .btn { min-height: 36px; padding: 6px 10px; font-size: 14px; }
 
 /* ---------- Hojas y diálogos ---------- */

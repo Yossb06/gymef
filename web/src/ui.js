@@ -108,7 +108,7 @@ function DialogView({ d, close }) {
 }
 
 // ---------- Componentes ----------
-export const VERSION = '2026-11-17.c09a06d';
+export const VERSION = '2026-11-19.93c6292';
 
 /** Zona donde se puede soltar un archivo arrastrado desde Finder (alternativa al selector de archivos). */
 export function DropZone({ onFile, children }) {
@@ -234,16 +234,6 @@ export const Field = ({ label, children, group }) => (group
   : html`<label class="field"><span>${label}</span>${children}</label>`);
 export const Input = ({ value, onInput, ...rest }) => html`<input class="input" value=${value ?? ''} onInput=${(e) => onInput(e.target.value)} ...${rest} />`;
 export const Stat = ({ value, label }) => html`<div class="stat"><div class="v">${value}</div><div class="l">${label}</div></div>`;
-export function Stepper({ value, onInput, onStep, label, decimal }) {
-  return html`
-    <div class="stepper">
-      <button type="button" class="step" aria-label=${`Reducir ${label}`} onClick=${() => onStep(-1)}>−</button>
-      <input class="input" aria-label=${label} inputmode=${decimal ? 'decimal' : 'numeric'} value=${value}
-        onInput=${(e) => onInput(e.target.value)} onFocus=${(e) => e.target.select()} />
-      <button type="button" class="step" aria-label=${`Aumentar ${label}`} onClick=${() => onStep(1)}>+</button>
-    </div>`;
-}
-
 /** Gráfica de línea simple en SVG. points: [{x: fecha ms, y: número}] */
 export function LineChart({ points, format = (v) => v }) {
   const [selected, setSelected] = useState(null);
