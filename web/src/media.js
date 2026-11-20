@@ -2,7 +2,7 @@
 // que la familia agrega a cada ejercicio (privados en su cuenta; se comparten entre perfiles).
 import { store, newId } from './store.js';
 import { normalizedName } from './domain.js';
-import { UserError } from './data.js';
+import { UserError, routines, days, dayEntries } from './data.js';
 import { EXERCISE_IMAGES } from './exercise-images.js';
 import { EXERCISE_ILLUSTRATIONS } from './exercise-illustrations.js';
 
@@ -54,6 +54,44 @@ export async function addExerciseMedia(exerciseID, file, owner) {
   if (previous) await removeExerciseMedia(previous.id);
   return media;
 }
+// ---------- Para el gimnasio sin señal ----------
+// Las fotos incluidas (≈3,5 MB) se descargan todas una vez, en segundo plano, cuando hay internet, en la misma caché
+// que usa sw.js; antes solo se guardaban las que ya se habían visto, y sin señal las demás salían en blanco.
+// Las fotos y GIF de la familia de los ejercicios de tus rutinas también se guardan (los videos no: pesan mucho).
+const MEDIA_CACHE = 'gymef-media-v1'; // el mismo nombre que en sw.js
+let warming = false;
+export async function warmOffline(owner) {
+  if (warming || !navigator.onLine) return;
+  warming = true;
+  try {
+    await cacheBuiltIn();
+    await cacheFamily(owner);
+  } catch (error) {
+    console.warn('No se pudieron guardar todas las fotos para usar sin internet.', error);
+  } finally { warming = false; }
+}
+async function cacheBuiltIn() {
+  if (!('caches' in window) || !navigator.serviceWorker?.controller) return;
+  const cache = await caches.open(MEDIA_CACHE);
+  const urls = [...new Set([...BUILT_IN.values()].flat())].map((src) => new URL(src, location.href).href);
+  const missing = [];
+  for (const url of urls) if (!(await cache.match(url))) missing.push(url);
+  // De 4 en 4, para no saturar una conexión lenta.
+  for (let i = 0; i < missing.length && navigator.onLine; i += 4) {
+    await Promise.all(missing.slice(i, i + 4).map(async (url) => {
+      try { const res = await fetch(url); if (res.ok) await cache.put(url, res); } catch {}
+    }));
+  }
+}
+async function cacheFamily(owner) {
+  const ids = new Set();
+  for (const r of routines(owner)) for (const d of days(r.id)) for (const e of dayEntries(d.id)) ids.add(e.exerciseID);
+  for (const id of ids) {
+    const m = customMedia(id);
+    if (m && m.kind !== 'video') await store.prefetchBlob(m.id, { name: fileName(m) }).catch(() => {});
+  }
+}
+
 export async function removeExerciseMedia(id) {
   const m = store.get('exerciseMedia', id);
   if (!m) return;

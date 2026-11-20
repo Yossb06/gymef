@@ -386,6 +386,14 @@ export function ExerciseVisual({ exercise, editable = false, compact = false, on
   const [attempt, setAttempt] = useState(0);
   const [frame, setFrame] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Foto incluida que no cargó (sin señal y aún sin guardar en el teléfono): aviso en vez de un recuadro en blanco.
+  const [offline, setOffline] = useState(false);
+  useEffect(() => { setOffline(false); }, [frames?.[0]]);
+  useEffect(() => {
+    const retry = () => { setOffline(false); setAttempt((a) => a + 1); };
+    addEventListener('online', retry);
+    return () => removeEventListener('online', retry);
+  }, []);
   useEffect(() => {
     let alive = true;
     setUrl(null); setFailed(false);
@@ -425,7 +433,9 @@ export function ExerciseVisual({ exercise, editable = false, compact = false, on
         : html`<img src=${url} alt=${`Cómo se hace ${N(exercise.name)}`} />`)
       : failed ? html`<span class="visual-loading" role="button" onClick=${(e) => { e.stopPropagation(); setAttempt((a) => a + 1); }}>No se pudo cargar.<br /><u>Reintentar</u></span>`
       : html`<span class="visual-loading">Cargando…</span>`)
-    : frames ? frames.map((src, i) => html`<img src=${src} alt=${i === 0 ? `Cómo se hace ${N(exercise.name)}` : ''} class=${i === frame ? 'on' : ''} loading="lazy" />`)
+    : frames ? (offline
+      ? html`<span class="visual-empty">📶${!compact && html`<br />La foto se verá cuando tengas internet`}</span>`
+      : frames.map((src, i) => html`<img src=${src} alt=${i === 0 ? `Cómo se hace ${N(exercise.name)}` : ''} class=${i === frame ? 'on' : ''} onError=${() => setOffline(true)} />`))
     : html`<span class="visual-empty">📷<br />Sin imagen</span>`;
   if (compact) return has ? html`<button class="visual compact" onClick=${onClick} aria-label=${`Ver cómo se hace ${N(exercise.name)}`}>${media}</button>` : null;
   return html`

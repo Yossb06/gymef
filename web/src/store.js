@@ -306,6 +306,15 @@ class Store {
     this.urlCache.set(id, url);
     return url;
   }
+  /** Baja de la nube un archivo que aún no está en el dispositivo, sin mostrarlo (para tenerlo sin conexión). */
+  async prefetchBlob(id, { name = `${id}.jpg` } = {}) {
+    if (this.mode !== 'cloud') return;
+    const stored = await this.idb((db) => request(db.transaction('blobs').objectStore('blobs').count(id)));
+    if (stored) return;
+    const { data, error } = await this.client.storage.from(BUCKET).download(`${this.user.id}/${name}`);
+    if (error) throw error;
+    await this.putBlob(id, data);
+  }
   async deleteBlob(id, { name = `${id}.jpg` } = {}) {
     this.urlCache.delete(id);
     if (this.mode === 'cloud') {

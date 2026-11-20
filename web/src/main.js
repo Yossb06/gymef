@@ -14,6 +14,7 @@ import { MoreView } from './screens/more.js';
 import { cloud, activeProfileID } from './session.js';
 import { applyAppearance } from './theme.js';
 import { setSpanishNames } from './catalog.js';
+import { warmOffline } from './media.js';
 
 const TABS = [['', 'Inicio', 'home'], ['rutinas', 'Rutinas', 'routines'], ['progreso', 'Progreso', 'progress'], ['historial', 'Historial', 'history'], ['mas', 'Más', 'more']];
 function TabBar({ current }) {
@@ -54,6 +55,15 @@ function Main() {
     addEventListener('gymef-profile', on);
     return () => removeEventListener('gymef-profile', on);
   }, []);
+  // Con internet, deja las fotos de los ejercicios guardadas en el teléfono para el gimnasio sin señal.
+  const current = activeProfileID();
+  useEffect(() => {
+    if (!current) return undefined;
+    const warm = () => warmOffline(current);
+    const t = setTimeout(warm, 4000);
+    addEventListener('online', warm);
+    return () => { clearTimeout(t); removeEventListener('online', warm); };
+  }, [current]);
   if (store.isEmpty()) {
     // Un teléfono nuevo sin conexión aún no ha descargado la cuenta: no ofrecer importar encima de datos existentes.
     if (store.mode === 'cloud' && !store.lastPulled) {

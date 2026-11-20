@@ -108,7 +108,7 @@ function DialogView({ d, close }) {
 }
 
 // ---------- Componentes ----------
-export const VERSION = '2026-11-19.93c6292';
+export const VERSION = '2026-11-19.3c862b1';
 
 /** Zona donde se puede soltar un archivo arrastrado desde Finder (alternativa al selector de archivos). */
 export function DropZone({ onFile, children }) {
